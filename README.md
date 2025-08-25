@@ -36,18 +36,18 @@ For VAE encoder-decoder and DDIM we use <a href="https://huggingface.co/stable-d
 ## Sampling using DiffusionPen
 
 For single image sampling run
-```
-python train.py --save_path ./diffusionpen_iam_model_path --style_path ./style_models/iam_style_diffusionpen.pth --train_mode sampling --sampling_mode single_sampling
+```sh
+python generate.py --save_path ./diffusionpen_iam_model_path\
+    --style_path ./style_models/iam_style_diffusionpen.pth\
+    --sampling_mode single_sampling
 ```
 
 For paragraph sampling run
+```sh
+python generate.py --save_path ./diffusionpen_iam_model_path\
+    --style_path ./style_models/iam_style_diffusionpen.pth\
+    --sampling_mode paragraph
 ```
-python train.py --save_path ./diffusionpen_iam_model_path --style_path ./style_models/iam_style_diffusionpen.pth --train_mode sampling --sampling_mode paragraph
-```
-
-We also provide the IAM training and validation set images generated using **DiffusionPen** in the following link:  
-[Download IAM Dataset Generated with DiffusionPen](https://drive.google.com/file/d/1IcQLZ8yIqdLgYyZUsFOl3v8qYN3h2RJL/view?usp=share_link)
-(test set will be soon uploaded!!!)
 
 ## Train with Your Own Data
 
@@ -59,7 +59,10 @@ python style_encoder_train.py
 ```
 2. Train DiffusionPen:
 ```
-python train.py --epochs 1000 --save_path /new/path/to/save/models --style_path /new/path/to/style/model.pth --stable_dif_path ./stable-diffusion-v1-5
+python train.py --epochs 1000 \
+    --save_path /new/path/to/save/models \
+    --style_path /new/path/to/style/model.pth \
+    --stable_dif_path ./stable-diffusion-v1-5
 ```
 
 ---

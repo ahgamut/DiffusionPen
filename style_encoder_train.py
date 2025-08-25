@@ -13,32 +13,16 @@ import os
 import argparse
 import torch.optim as optim
 from tqdm import tqdm
-from utils.iam_dataset import IAMDataset
-from utils.auxilary_functions import affine_transformation
-from feature_extractor import ImageEncoder
 import timm
 import cv2
 import time
 import json
 import random
 
-
-class AvgMeter:
-    def __init__(self, name="Metric"):
-        self.name = name
-        self.reset()
-
-    def reset(self):
-        self.avg, self.sum, self.count = [0] * 3
-
-    def update(self, val, count=1):
-        self.count += count
-        self.sum += val * count
-        self.avg = self.sum / self.count
-
-    def __repr__(self):
-        text = f"{self.name}: {self.avg:.4f}"
-        return text
+#
+from utils.iam_dataset import IAMDataset
+from utils.auxilary_functions import affine_transformation
+from models import ImageEncoder, AvgMeter
 
 
 class WordStyleDataset(Dataset):
