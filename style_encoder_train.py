@@ -1289,6 +1289,73 @@ def train_triplet(
         scheduler.step(val_loss)
 
 
+def build_IAMDataset(args):
+    myDataset = IAMDataset_style
+    # dataset_folder = '/usr/share/datasets_ianos'
+    dataset_folder = "/path/to/iam_data/"
+    aug_transforms = [lambda x: affine_transformation(x, s=0.1)]
+
+    train_transform = transforms.Compose(
+        [
+            # transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
+            ),  # transforms.Normalize((0.5,), (0.5,)),  #
+        ]
+    )
+
+    val_transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize(
+                (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
+            ),  # transforms.Normalize((0.5,), (0.5,)),  #
+        ]
+    )
+
+    # train_data = myDataset(dataset_folder, 'train', 'word', fixed_size=(1 * 64, 256), tokenizer=None, text_encoder=None, feat_extractor=None, transforms=train_transform, args=args)
+    train_data = myDataset(
+        dataset_folder,
+        "train",
+        "word",
+        fixed_size=(1 * 64, 256),
+        transforms=train_transform,
+    )
+
+    # print('len train data', len(train_data))
+    # split with torch.utils.data.Subset into train and val
+    validation_size = int(0.2 * len(train_data))
+
+    # Calculate the size of the training set
+    train_size = len(train_data) - validation_size
+
+    # Use random_split to split the dataset into train and validation sets
+    train_data, val_data = random_split(
+        train_data,
+        [train_size, validation_size],
+        generator=torch.Generator().manual_seed(42),
+    )
+    print("len train data", len(train_data))
+    print("len val data", len(val_data))
+
+    train_loader = DataLoader(
+        train_data, batch_size=args.batch_size, shuffle=True, num_workers=4
+    )
+
+    val_loader = DataLoader(
+        val_data, batch_size=args.batch_size, shuffle=False, num_workers=4
+    )
+    if val_loader is not None:
+        print("Val data")
+    else:
+        print("No validation data")
+
+    style_classes = 339
+
+    return train_data, val_data, train_loader, val_loader, style_classes
+
+
 def main():
     """Main function"""
     parser = argparse.ArgumentParser(description="Train Style Encoder")
@@ -1336,70 +1403,9 @@ def main():
         os.makedirs(args.save_path)
 
     if args.dataset == "iam":
-
-        myDataset = IAMDataset_style
-        # dataset_folder = '/usr/share/datasets_ianos'
-        dataset_folder = "/path/to/iam_data/"
-        aug_transforms = [lambda x: affine_transformation(x, s=0.1)]
-
-        train_transform = transforms.Compose(
-            [
-                # transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
-                ),  # transforms.Normalize((0.5,), (0.5,)),  #
-            ]
+        train_data, val_data, train_loader, val_loader, style_classes = (
+            build_IAMDataset(args)
         )
-
-        val_transform = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
-                ),  # transforms.Normalize((0.5,), (0.5,)),  #
-            ]
-        )
-
-        # train_data = myDataset(dataset_folder, 'train', 'word', fixed_size=(1 * 64, 256), tokenizer=None, text_encoder=None, feat_extractor=None, transforms=train_transform, args=args)
-        train_data = myDataset(
-            dataset_folder,
-            "train",
-            "word",
-            fixed_size=(1 * 64, 256),
-            transforms=train_transform,
-        )
-
-        # print('len train data', len(train_data))
-        # split with torch.utils.data.Subset into train and val
-        validation_size = int(0.2 * len(train_data))
-
-        # Calculate the size of the training set
-        train_size = len(train_data) - validation_size
-
-        # Use random_split to split the dataset into train and validation sets
-        train_data, val_data = random_split(
-            train_data,
-            [train_size, validation_size],
-            generator=torch.Generator().manual_seed(42),
-        )
-        print("len train data", len(train_data))
-        print("len val data", len(val_data))
-
-        train_loader = DataLoader(
-            train_data, batch_size=args.batch_size, shuffle=True, num_workers=4
-        )
-
-        val_loader = DataLoader(
-            val_data, batch_size=args.batch_size, shuffle=False, num_workers=4
-        )
-        if val_loader is not None:
-            print("Val data")
-        else:
-            print("No validation data")
-
-        style_classes = 339
-
     else:
         print(
             "You need to add your own dataset and define the number of style classes!!!"
@@ -1419,7 +1425,6 @@ def main():
             )
         )
         if args.pretrained == True:
-
             state_dict = torch.load(PATH, map_location=args.device)
             model_dict = model.state_dict()
             state_dict = {
