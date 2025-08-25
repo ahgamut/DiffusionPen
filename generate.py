@@ -119,9 +119,6 @@ def crop_whitespace_width(img):
 def main():
     """Main function"""
     parser = argparse.ArgumentParser()
-    parser.add_argument("--epochs", type=int, default=1000)
-    parser.add_argument("--batch_size", type=int, default=320)
-    parser.add_argument("--num_workers", type=int, default=4)
     parser.add_argument(
         "--model_name",
         type=str,
@@ -130,7 +127,6 @@ def main():
     )
     parser.add_argument("--level", type=str, default="word", help="word, line")
     parser.add_argument("--img_size", type=int, default=(64, 256))
-    parser.add_argument("--dataset", type=str, default="iam", help="iam, gnhk")
     # UNET parameters
     parser.add_argument("--channels", type=int, default=4)
     parser.add_argument("--emb_dim", type=int, default=320)
@@ -141,7 +137,6 @@ def main():
     )
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--color", type=bool, default=True)
-    parser.add_argument("--unet", type=str, default="unet_latent", help="unet_latent")
     parser.add_argument("--latent", type=bool, default=True)
     parser.add_argument("--img_feat", type=bool, default=True)
     parser.add_argument("--interpolation", type=bool, default=False)
@@ -180,91 +175,6 @@ def main():
         ]
     )
 
-    if args.dataset == "iam":
-        print("loading IAM")
-        iam_folder = "./iam_data/words"
-        myDataset = IAMDataset
-        style_classes = 339
-        if args.level == "word":
-            train_data = myDataset(
-                iam_folder,
-                "train",
-                "word",
-                fixed_size=(1 * 64, 256),
-                tokenizer=None,
-                text_encoder=None,
-                feat_extractor=None,
-                transforms=transform,
-                args=args,
-            )
-        else:
-            train_data = myDataset(
-                iam_folder,
-                "train",
-                "word",
-                fixed_size=(1 * 64, 256),
-                tokenizer=None,
-                text_encoder=None,
-                feat_extractor=None,
-                transforms=transform,
-                args=args,
-            )
-            test_data = myDataset(
-                iam_folder,
-                "test",
-                "word",
-                fixed_size=(1 * 64, 256),
-                tokenizer=None,
-                text_encoder=None,
-                feat_extractor=None,
-                transforms=transform,
-                args=args,
-            )
-        print("train data", len(train_data))
-
-        test_size = args.batch_size
-        rest = len(train_data) - test_size
-        test_data, _ = random_split(
-            train_data, [test_size, rest], generator=torch.Generator().manual_seed(42)
-        )
-
-    elif args.dataset == "gnhk":
-        print("loading GNHK")
-        myDataset = GNHK_Dataset
-        dataset_folder = "path/to/GNHK"
-        style_classes = 515
-        train_transform = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
-                ),  # transforms.Normalize((0.5,), (0.5,)),  #
-            ]
-        )
-        train_data = myDataset(
-            dataset_folder,
-            "train",
-            "word",
-            fixed_size=(1 * 64, 256),
-            tokenizer=None,
-            text_encoder=None,
-            feat_extractor=None,
-            transforms=train_transform,
-            args=args,
-        )
-        test_size = args.batch_size
-        rest = len(train_data) - test_size
-        test_data, _ = random_split(
-            train_data, [test_size, rest], generator=torch.Generator().manual_seed(42)
-        )
-
-    train_loader = DataLoader(
-        train_data, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers
-    )
-
-    test_loader = DataLoader(
-        test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers
-    )
     character_classes = [
         "!",
         '"',
@@ -364,22 +274,21 @@ def main():
     text_encoder = nn.DataParallel(text_encoder, device_ids=device_ids)
     text_encoder = text_encoder.to(args.device)
 
-    if args.unet == "unet_latent":
-        unet = UNetModel(
-            image_size=args.img_size,
-            in_channels=args.channels,
-            model_channels=args.emb_dim,
-            out_channels=args.channels,
-            num_res_blocks=args.num_res_blocks,
-            attention_resolutions=(1, 1),
-            channel_mult=(1, 1),
-            num_heads=args.num_heads,
-            num_classes=style_classes,
-            context_dim=args.emb_dim,
-            vocab_size=vocab_size,
-            text_encoder=text_encoder,
-            args=args,
-        )  # .to(args.device)
+    unet = UNetModel(
+        image_size=args.img_size,
+        in_channels=args.channels,
+        model_channels=args.emb_dim,
+        out_channels=args.channels,
+        num_res_blocks=args.num_res_blocks,
+        attention_resolutions=(1, 1),
+        channel_mult=(1, 1),
+        num_heads=args.num_heads,
+        num_classes=style_classes,
+        context_dim=args.emb_dim,
+        vocab_size=vocab_size,
+        text_encoder=text_encoder,
+        args=args,
+    )  # .to(args.device)
 
     unet = DataParallel(unet, device_ids=device_ids)
     unet = unet.to(args.device)
@@ -436,7 +345,6 @@ def main():
     feature_extractor = feature_extractor.to(args.device)
     feature_extractor.requires_grad_(False)
     feature_extractor.eval()
-
 
     print("Sampling started....")
 
@@ -558,9 +466,7 @@ def main():
             # scaled_width = int(scaling_factor * len(word))#) * as_ratio * max_height)
             scaled_width = int(avg_char_width * len(word))
 
-            scaled_img = img_pil.resize(
-                (scaled_width, int(scaled_width / as_ratio))
-            )
+            scaled_img = img_pil.resize((scaled_width, int(scaled_width / as_ratio)))
             print(f"Word {word} - scaled_img {scaled_img.size}")
             # Padding
             # if word is in punctuation:
