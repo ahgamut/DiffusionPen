@@ -1,0 +1,1 @@
+In this work , we focus on style variation . We present a novel method to control the style of the text . Our method is able to mimic various writing styles .
