@@ -228,25 +228,13 @@ class Diffusion:
                 style_images = data[3].to(args.device)
                 cor_im = data[5].to(args.device)
                 img_path = data[4]
-
-                if args.model_name == "wordstylist":
-                    # print('transcr', transcr)
-                    batch_word_embeddings = []
-                    for trans in transcr:
-                        word_embedding = label_padding(trans)
-                        # print('word_embedding', word_embedding)
-                        word_embedding = np.array(word_embedding, dtype="int64")
-                        word_embedding = torch.from_numpy(word_embedding).long()
-                        batch_word_embeddings.append(word_embedding)
-                    text_features = torch.stack(batch_word_embeddings).to(args.device)
-                else:
-                    text_features = tokenizer(
-                        transcr,
-                        padding="max_length",
-                        truncation=True,
-                        return_tensors="pt",
-                        max_length=200,
-                    ).to(args.device)
+                text_features = tokenizer(
+                    transcr,
+                    padding="max_length",
+                    truncation=True,
+                    return_tensors="pt",
+                    max_length=200,
+                ).to(args.device)
 
                 reshaped_images = style_images.reshape(-1, 3, 64, 256)
 
@@ -608,22 +596,13 @@ def train(
             s_id = data[2].to(args.device)
             style_images = data[3].to(args.device)
 
-            if args.model_name == "wordstylist":
-                batch_word_embeddings = []
-                for trans in transcr:
-                    word_embedding = label_padding(trans, num_tokens)
-                    word_embedding = np.array(word_embedding, dtype="int64")
-                    word_embedding = torch.from_numpy(word_embedding).long()
-                    batch_word_embeddings.append(word_embedding)
-                text_features = torch.stack(batch_word_embeddings)
-            else:
-                text_features = tokenizer(
-                    transcr,
-                    padding="max_length",
-                    truncation=True,
-                    return_tensors="pt",
-                    max_length=40,
-                ).to(args.device)
+            text_features = tokenizer(
+                transcr,
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
+                max_length=40,
+            ).to(args.device)
 
             if style_extractor is not None:
                 reshaped_images = style_images.reshape(-1, 3, 64, 256)
@@ -754,7 +733,7 @@ def main():
         "--model_name",
         type=str,
         default="diffusionpen",
-        help="diffusionpen or wordstylist (previous work)",
+        help="(deprecated)",
     )
     parser.add_argument("--level", type=str, default="word", help="word, line")
     parser.add_argument("--img_size", type=int, default=(64, 256))
@@ -987,11 +966,7 @@ def main():
     ]
 
     ######################### MODEL #######################################
-    if args.model_name == "wordstylist":
-        vocab_size = len(character_classes) + 2
-        print("vocab size", vocab_size)
-    else:
-        vocab_size = len(character_classes)
+    vocab_size = len(character_classes)
     print("Vocab size: ", vocab_size)
 
     if args.dataparallel == True:
@@ -1002,15 +977,10 @@ def main():
         device_ids = [idx]
     # unet = unet.to(args.device)
 
-    if args.model_name == "diffusionpen":
-        tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
-        text_encoder = CanineModel.from_pretrained("google/canine-c")
-        text_encoder = nn.DataParallel(text_encoder, device_ids=device_ids)
-        text_encoder = text_encoder.to(args.device)
-
-    else:
-        tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
-        text_encoder = None
+    tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
+    text_encoder = CanineModel.from_pretrained("google/canine-c")
+    text_encoder = nn.DataParallel(text_encoder, device_ids=device_ids)
+    text_encoder = text_encoder.to(args.device)
 
     if args.unet == "unet_latent":
         unet = UNetModel(
