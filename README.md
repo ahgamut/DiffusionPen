@@ -21,14 +21,16 @@ Database][csafe-hw].
 </p> 
 
 
-## Download Dataset & Models from Hugging Face 🤗
-You can download the pre-processed dataset and model weights from HF here: <a href="https://huggingface.co/konnik/DiffusionPen">https://huggingface.co/konnik/DiffusionPen</a> 
+## Download Dataset & Models from Hugging Face
+
+You can download the pre-processed dataset and model weights from HF here: <a
+href="https://huggingface.co/konnik/DiffusionPen">https://huggingface.co/konnik/DiffusionPen</a> 
 
 - IAM pre-processed dataset in .pt for direct loading in <a href="https://huggingface.co/konnik/DiffusionPen/tree/main/saved_iam_data">saved_iam_data</a>
 - Style weights for the style encoder (also DiffusionPen-class and DiffusionPen-triplet) in <a href="https://huggingface.co/konnik/DiffusionPen/tree/main/style_models">style_models</a>
 - DiffusionPen weights for IAM in <a href="https://huggingface.co/konnik/DiffusionPen/tree/main/diffusionpen_iam_model_path/models">diffusionpen_iam_model_path/models</a>
 
-Place the folders 📁`saved_iam_data`, 📁`style_models`, and 📁`diffusionpen_iam_model_path` in the main code directory.
+Place the folders `saved_iam_data`, `style_models`, and `diffusionpen_iam_model_path` in the main code directory.
 
 For VAE encoder-decoder and DDIM we use <a href="https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5">stable-diffusion-v1-5</a>.
 
@@ -39,19 +41,20 @@ For single image sampling run
 ```sh
 python generate.py --save_path ./diffusionpen_iam_model_path\
     --style_path ./style_models/iam_style_diffusionpen.pth\
-    --sampling_mode single_sampling
+    --sampling_word "WORD"
 ```
 
 For paragraph sampling run
 ```sh
-python generate.py --save_path ./diffusionpen_iam_model_path\
+python gen_paragraph.py --save_path ./diffusionpen_iam_model_path\
     --style_path ./style_models/iam_style_diffusionpen.pth\
-    --sampling_mode paragraph
+    --text_file ./sample.txt
 ```
 
 ## Train with Your Own Data
 
-If you'd like to train DiffusionPen using your own data, simply adjust the data loader to fit your dataset and follow these 2 steps:
+If you'd like to train DiffusionPen using your own data, simply adjust the data
+loader to fit your dataset and follow these 2 steps:
 
 1. Train the Style Encoder:
 ```
