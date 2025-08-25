@@ -14,7 +14,6 @@ import json
 from diffusers import AutoencoderKL, DDIMScheduler
 import random
 from unet import UNetModel
-import wandb
 from torchvision import transforms
 from feature_extractor import ImageEncoder
 from utils.iam_dataset import IAMDataset
@@ -704,12 +703,6 @@ def train(
                     args,
                 )
 
-            if args.wandb_log == True:
-                wandb_sampled_ema = wandb.Image(
-                    sampled_ema, caption=f"{x_text}_{epoch}"
-                )
-                wandb.log({f"Sampled images": wandb_sampled_ema})
-
             torch.save(
                 model.state_dict(), os.path.join(args.save_path, "models", "ckpt.pt")
             )
@@ -747,7 +740,6 @@ def main():
         "--save_path", type=str, default="./diffusionpen_iam_model_path"
     )
     parser.add_argument("--device", type=str, default="cuda:0")
-    parser.add_argument("--wandb_log", type=bool, default=False)
     parser.add_argument("--color", type=bool, default=True)
     parser.add_argument("--unet", type=str, default="unet_latent", help="unet_latent")
     parser.add_argument("--latent", type=bool, default=True)
@@ -776,13 +768,6 @@ def main():
     args = parser.parse_args()
 
     print("torch version", torch.__version__)
-
-    if args.wandb_log == True:
-        runs = wandb.init(
-            project="DiffusionPen", entity="name_entity", name=args.dataset, config=args
-        )
-
-        wandb.config.update(args)
 
     # create save directories
     setup_logging(args)

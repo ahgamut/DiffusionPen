@@ -1230,8 +1230,6 @@ def train_classification(
         print("[Epoch", epoch_i, "]")
 
         start = time.time()
-        # wandb.log({'lr': scheduler.get_last_lr()})
-        # print('Epoch:', epoch_i,'LR:', scheduler.get_last_lr())
 
         train_loss, train_acc = train_class_epoch(model, training_data, optimizer, args)
         print(
@@ -1277,8 +1275,6 @@ def train_classification(
             )
 
         scheduler.step()
-        # wandb.log({'epoch': epoch_i, 'train loss': train_loss, 'val loss': val_loss})
-        # wandb.log({'epoch': epoch_i, 'train acc': 100*train_acc, 'val acc': 100*val_acc})
 
 
 def train_triplet(
