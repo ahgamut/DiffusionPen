@@ -259,9 +259,9 @@ def main():
     # load from last checkpoint
 
     if args.load_check == True:
-        unet.load_state_dict(torch.load(f"{args.save_path}/models/ckpt.pt"))
-        optimizer.load_state_dict(torch.load(f"{args.save_path}/models/optim.pt"))
-        ema_model.load_state_dict(torch.load(f"{args.save_path}/models/ema_ckpt.pt"))
+        unet.load_state_dict(torch.load(f"{args.save_path}/models/ckpt.pt", weights_only=True))
+        optimizer.load_state_dict(torch.load(f"{args.save_path}/models/optim.pt", weights_only=True))
+        ema_model.load_state_dict(torch.load(f"{args.save_path}/models/ema_ckpt.pt", weights_only=True))
         print("Loaded models and optimizer")
 
     if args.latent == True:
@@ -283,7 +283,7 @@ def main():
     )
     PATH = args.style_path
 
-    state_dict = torch.load(PATH, map_location=args.device)
+    state_dict = torch.load(PATH, map_location=args.device, weights_only=True)
     model_dict = feature_extractor.state_dict()
     state_dict = {
         k: v
@@ -300,14 +300,14 @@ def main():
     print("Sampling started....")
 
     unet.load_state_dict(
-        torch.load(f"{args.save_path}/models/ckpt.pt", map_location=args.device)
+        torch.load(f"{args.save_path}/models/ckpt.pt", map_location=args.device, weights_only=True)
     )
     print("unet loaded")
     unet.eval()
 
     ema = EMA(0.995)
     ema_model = copy.deepcopy(unet).eval().requires_grad_(False)
-    ema_model.load_state_dict(torch.load(f"{args.save_path}/models/ema_ckpt.pt"))
+    ema_model.load_state_dict(torch.load(f"{args.save_path}/models/ema_ckpt.pt", weights_only=True))
     ema_model.eval()
 
     print("Sampling paragraph")
