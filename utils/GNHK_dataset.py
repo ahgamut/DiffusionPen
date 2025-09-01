@@ -201,7 +201,7 @@ class GNHK_Dataset(WordLineDataset):
         print("len data", len(data))
 
         # save writer_dict
-        with open(f"writer_dict_train_gnhk.json", "w") as f:
+        with open(f"utils/writer_dict_train_gnhk.json", "w") as f:
             json.dump(wr_dict, f)
 
         return data

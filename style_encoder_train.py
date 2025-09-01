@@ -726,7 +726,7 @@ class IAMDataset_style(WordLineDataset):
             gt = []
             form_writer_dict = {}
 
-            dict_path = f"./writers_dict_{subset}.json"
+            dict_path = f"utils/writers_dict_{subset}.json"
             # open dict file
             with open(dict_path, "r") as f:
                 wr_dict = json.load(f)

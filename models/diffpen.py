@@ -235,7 +235,7 @@ class Diffusion:
             ).to(args.device)
             if args.img_feat == True:
                 # pick random image according to specific style
-                with open("./writers_dict_train.json", "r") as f:
+                with open("utils/writers_dict_train.json", "r") as f:
 
                     wr_dict = json.load(f)
                 reverse_wr_dict = {v: k for k, v in wr_dict.items()}

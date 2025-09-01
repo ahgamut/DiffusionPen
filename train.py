@@ -55,12 +55,12 @@ def labelDictionary():
     letter2index = {label: n for n, label in enumerate(labels)}
     # create json object from dictionary if you want to save writer ids
     json_dict_l = json.dumps(letter2index)
-    l = open("letter2index.json", "w")
+    l = open("utils/letter2index.json", "w")
     l.write(json_dict_l)
     l.close()
     index2letter = {v: k for k, v in letter2index.items()}
     json_dict_i = json.dumps(index2letter)
-    l = open("index2letter.json", "w")
+    l = open("utils/index2letter.json", "w")
     l.write(json_dict_i)
     l.close()
     return len(labels), letter2index, index2letter
