@@ -2,7 +2,7 @@ import os
 import torch
 import torch.nn as nn
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 from torch.utils.data import DataLoader, random_split
 import torchvision
 from tqdm import tqdm
