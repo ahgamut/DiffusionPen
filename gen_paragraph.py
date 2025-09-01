@@ -107,6 +107,7 @@ def main():
         "--stable_dif_path", type=str, default="./stable-diffusion-v1-5"
     )
     parser.add_argument("-i", "--text-file", type=file_check, default="./sample.txt")
+    parser.add_argument("-o", "--output", type=str, default="./output.png")
 
     args = parser.parse_args()
     print("torch version", torch.__version__)
@@ -525,7 +526,7 @@ def main():
     paragraph_image = Image.fromarray(paragraph_img)
     paragraph_image = paragraph_image.convert("L")
 
-    paragraph_image.save(f"paragraph_style_{s}.png")
+    paragraph_image.save(args.output)
 
 
 if __name__ == "__main__":
