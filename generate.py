@@ -13,9 +13,8 @@ import uuid
 import json
 from diffusers import AutoencoderKL, DDIMScheduler
 import random
-from models import EMA, Diffusion, UNetModel
+from models import EMA, Diffusion, UNetModel, ImageEncoder
 from torchvision import transforms
-from feature_extractor import ImageEncoder
 from utils.iam_dataset import IAMDataset
 from utils.GNHK_dataset import GNHK_Dataset
 from utils.auxilary_functions import *
@@ -70,6 +69,7 @@ def main():
         default="diffusionpen",
         help="(deprecated)",
     )
+    parser.add_argument("-w", "--writer-id", type=int, default=12)
     parser.add_argument("--level", type=str, default="word", help="word, line")
     parser.add_argument("--img_size", type=int, default=(64, 256))
     # UNET parameters
@@ -299,7 +299,8 @@ def main():
     ema_model.eval()
 
     text_words = [args.sampling_word]
-    writer_id = random.randint(0, 339)  # index for style class
+    # writer_id = random.randint(0, 339)
+    writer_id = args.writer_id  # index for style class
     for x_text in text_words:
         print("Word:", x_text)
         print("style", writer_id)

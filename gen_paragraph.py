@@ -13,9 +13,8 @@ import uuid
 import json
 from diffusers import AutoencoderKL, DDIMScheduler
 import random
-from models import EMA, Diffusion, UNetModel
+from models import EMA, Diffusion, UNetModel, ImageEncoder
 from torchvision import transforms
-from feature_extractor import ImageEncoder
 from utils.iam_dataset import IAMDataset
 from utils.GNHK_dataset import GNHK_Dataset
 from utils.auxilary_functions import *
@@ -81,6 +80,7 @@ def main():
         default="diffusionpen",
         help="(deprecated)",
     )
+    parser.add_argument("-w", "--writer-id", type=int, default=12)
     parser.add_argument("--level", type=str, default="word", help="word, line")
     parser.add_argument("--img_size", type=int, default=(64, 256))
     # UNET parameters
@@ -105,7 +105,7 @@ def main():
     parser.add_argument(
         "--stable_dif_path", type=str, default="./stable-diffusion-v1-5"
     )
-    parser.add_argument("--text-file", type=file_check, default="./sample.txt")
+    parser.add_argument("-i", "--text-file", type=file_check, default="./sample.txt")
 
     args = parser.parse_args()
     print("torch version", torch.__version__)
@@ -322,7 +322,7 @@ def main():
     # print('longest_word_length', longest_word_length)
     # s = random.randint(0, 339)#.long().to(args.device)
     # s = random.randint(0, 161)#.long().to(args.device)
-    s = 12  # 25 #129 #201
+    s = args.writer_id  # 25 #129 #201
     for word in lines.strip().split(" "):
         print("Word:", word)
         print("Style:", s)
