@@ -1425,7 +1425,7 @@ def main():
             )
         )
         if args.pretrained == True:
-            state_dict = torch.load(PATH, map_location=args.device)
+            state_dict = torch.load(PATH, map_location=args.device, weights_only=True)
             model_dict = model.state_dict()
             state_dict = {
                 k: v
@@ -1456,7 +1456,7 @@ def main():
         if args.pretrained == True:
             PATH = ""
 
-            state_dict = torch.load(PATH, map_location=args.device)
+            state_dict = torch.load(PATH, map_location=args.device, weights_only=True)
             model_dict = model.state_dict()
             state_dict = {
                 k: v

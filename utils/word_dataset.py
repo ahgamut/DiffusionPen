@@ -193,7 +193,7 @@ class WordLineDataset(Dataset):
             data = self.main_loader(self.subset, self.segmentation_level)
             torch.save(data, save_file)  # Uncomment this in 'release' version
         else:
-            data = torch.load(save_file)
+            data = torch.load(save_file, weights_only=True)
 
         # data = self.main_loader(self.subset, self.segmentation_level)
         self.data = data
