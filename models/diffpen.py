@@ -18,7 +18,7 @@ from torchvision.utils import save_image
 from torch.nn import DataParallel
 from transformers import CanineModel, CanineTokenizer
 #
-# from utils.auxilary_functions import *
+from .auxiliary_functions import affine_transformation, image_resize, image_resize_PIL, centered, centered_PIL
 from .feature_extractor import ImageEncoder
 
 
