@@ -296,7 +296,7 @@ def main():
 
     ema = EMA(0.995)
     ema_model = copy.deepcopy(unet).eval().requires_grad_(False)
-    ema_model.load_state_dict(torch.load(f"{args.save_path}/models/ema_ckpt.pt", weights_only=True))
+    ema_model.load_state_dict(torch.load(f"{args.save_path}/models/ema_ckpt.pt", map_location=args.device, weights_only=True))
     ema_model.eval()
 
     text_words = [args.sampling_word]

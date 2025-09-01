@@ -307,7 +307,7 @@ def main():
 
     ema = EMA(0.995)
     ema_model = copy.deepcopy(unet).eval().requires_grad_(False)
-    ema_model.load_state_dict(torch.load(f"{args.save_path}/models/ema_ckpt.pt", weights_only=True))
+    ema_model.load_state_dict(torch.load(f"{args.save_path}/models/ema_ckpt.pt", map_location=args.device, weights_only=True))
     ema_model.eval()
 
     print("Sampling paragraph")
@@ -341,7 +341,6 @@ def main():
             character_classes=None,
             tokenizer=tokenizer,
             text_encoder=text_encoder,
-            clip_model=None,
             run_idx=None,
         )
         # print('ema_sampled_images', ema_sampled_images.shape)
