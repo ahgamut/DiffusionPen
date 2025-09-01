@@ -1,4 +1,5 @@
 # these folders are symlinked, needed to run the code
+diffusionpen_iam_model_path
 saved_iam_data
 iam_data
 stable-diffusion-v1-5

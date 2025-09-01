@@ -209,6 +209,7 @@ def main():
 
     ######################### MODEL #######################################
     vocab_size = len(character_classes)
+    style_classes = 339 # for IAM Dataset
     print("Vocab size: ", vocab_size)
 
     if args.dataparallel == True:
