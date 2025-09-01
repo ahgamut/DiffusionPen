@@ -1,3 +1,8 @@
+# these folders are symlinked, needed to run the code
+saved_iam_data
+iam_data
+stable-diffusion-v1-5
+style_models
 #
 __pycache__/
 *.py[codz]
