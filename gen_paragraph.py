@@ -27,6 +27,7 @@ OUTPUT_MAX_LEN = 95  # + 2  # <GO>+groundtruth+<END>
 IMG_WIDTH = 256
 IMG_HEIGHT = 64
 
+PUNCTUATION = "_!\"#&'()*+,-./:;?"
 
 def setup_logging(args):
     # os.makedirs("models", exist_ok=True)
@@ -389,8 +390,8 @@ def main():
         scaled_img = img_pil.resize((scaled_width, int(scaled_width / as_ratio)))
         print(f"Word {word} - scaled_img {scaled_img.size}")
         # Padding
-        # if word is in punctuation:
-        if word in punctuation:
+        # if word is in PUNCTUATION:
+        if word in PUNCTUATION:
             # rescale to height 10
             w_punc = scaled_img.width
             h_punc = scaled_img.height
