@@ -385,9 +385,10 @@ def main():
         img_pil = Image.fromarray(img)
         as_ratio = img_pil.width / img_pil.height
         # scaled_width = int(scaling_factor * len(word))#) * as_ratio * max_height)
-        scaled_width = int(avg_char_width * len(word))
+        scaled_width = max(5, int(avg_char_width * len(word)))
+        scaled_height = max(5, int(scaled_width / as_ratio))
 
-        scaled_img = img_pil.resize((scaled_width, int(scaled_width / as_ratio)))
+        scaled_img = img_pil.resize((scaled_width, scaled_height))
         print(f"Word {word} - scaled_img {scaled_img.size}")
         # Padding
         # if word is in PUNCTUATION:
