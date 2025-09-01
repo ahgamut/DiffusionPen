@@ -1,3 +1,6 @@
+# output images
+outputs
+
 # these folders are symlinked, needed to run the code
 diffusionpen_iam_model_path
 saved_iam_data
