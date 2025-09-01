@@ -1,3 +1,6 @@
+#
+utils/splits_words/cvl_*.txt
+
 # output images
 outputs
 

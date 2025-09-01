@@ -64,8 +64,8 @@ def get_actual_word(x):
 
 
 def get_wpath_coll(root_folder, only_ascii):
-    train_words = os.path.join(root_folder, "trainset", "words", "*.tif")
-    test_words = os.path.join(root_folder, "testset", "words", "*.tif")
+    train_words = os.path.join(root_folder, "trainset", "words", "*", "*.tif")
+    test_words = os.path.join(root_folder, "testset", "words", "*", "*.tif")
     files0 = glob.glob(train_words) + glob.glob(test_words)
     if only_ascii:
         files1 = filter(wpath_is_ascii, files0)
@@ -109,12 +109,14 @@ def get_splits(wpath_coll, train_split):
     return train_list, val_list, test_list
 
 
-def wpaths_to_file(fname, wpath_list):
+def wpaths_to_file(root_folder, fname, wpath_list):
     with open(fname, "w") as f:
         for wpath in wpath_list:
             wid = get_writer_id(wpath)
             word = get_actual_word(wpath)
-            f.write("f{wpath},{wid},{word}\n")
+            assert root_folder in wpath
+            relpath = wpath.replace(root_folder, "")
+            f.write(f"{relpath},{wid},{word}\n")
 
 
 def main():
@@ -162,12 +164,12 @@ def main():
     train_list, test_list, val_list = get_splits(wpath_coll, args.train_split)
     train_val_list = train_list + val_list
     #
-    wpaths_to_file(os.path.join(args.output_folder, "cvl_training.txt"), train_list)
-    wpaths_to_file(os.path.join(args.output_folder, "cvl_val.txt"), val_list)
+    wpaths_to_file(args.cvl_folder, os.path.join(args.output_folder, "cvl_training.txt"), train_list)
+    wpaths_to_file(args.cvl_folder, os.path.join(args.output_folder, "cvl_val.txt"), val_list)
     wpaths_to_file(
-        os.path.join(args.output_folder, "cvl_train_val.txt"), train_val_list
+        args.cvl_folder, os.path.join(args.output_folder, "cvl_train_val.txt"), train_val_list
     )
-    wpaths_to_file(os.path.join(args.output_folder, "cvl_test.txt"), test_list)
+    wpaths_to_file(args.cvl_folder, os.path.join(args.output_folder, "cvl_test.txt"), test_list)
 
 
 if __name__ == "__main__":
