@@ -213,8 +213,10 @@ def add_padding(
     return scaled_padded_words
 
 
-def build_paragraph_image(scaled_padded_words, max_line_width=900, height=64):
-    gap = np.ones((height, 16), dtype=np.uint8) * 255  # White gap
+def build_paragraph_image(
+    scaled_padded_words, max_line_width=900, gap_height=64, gap_width=16
+):
+    gap = np.ones((gap_height, gap_width), dtype=np.uint8) * 255  # White gap
     current_line_width = 0
     # Concatenate images with gaps
     sentence_img = gap  # Start with a gap
@@ -235,7 +237,7 @@ def build_paragraph_image(scaled_padded_words, max_line_width=900, height=64):
             # Add the image to the current line
             if line_img.shape[0] == 0:
                 line_img = (
-                    np.ones((height, 0), dtype=np.uint8) * 255
+                    np.ones((gap_height, 0), dtype=np.uint8) * 255
                 )  # Start a new line
             line_img = np.concatenate((line_img, img, gap), axis=1)
             current_line_width += img_width  # + gap.shape[1]
@@ -247,7 +249,7 @@ def build_paragraph_image(scaled_padded_words, max_line_width=900, height=64):
             line_img = np.concatenate(
                 (
                     line_img,
-                    np.ones((height, remaining_width), dtype=np.uint8) * 255,
+                    np.ones((gap_height, remaining_width), dtype=np.uint8) * 255,
                 ),
                 axis=1,
             )
@@ -264,7 +266,7 @@ def build_paragraph_image(scaled_padded_words, max_line_width=900, height=64):
         line_img = np.concatenate(
             (
                 line_img,
-                np.ones((height, remaining_width), dtype=np.uint8) * 255,
+                np.ones((gap_height, remaining_width), dtype=np.uint8) * 255,
             ),
             axis=1,
         )
@@ -299,7 +301,9 @@ def main():
     parser.add_argument("-w", "--writer-range", type=range_check, default=(1, 1))
     parser.add_argument("--level", type=str, default="word", help="word, line")
     parser.add_argument("--img-size", type=int, default=(64, 256))
-    parser.add_argument("--max-line-width", default=900, type=int, help="max line width")
+    parser.add_argument(
+        "--max-line-width", default=900, type=int, help="max line width"
+    )
     # UNET parameters
     parser.add_argument("--channels", type=int, default=4)
     parser.add_argument("--emb_dim", type=int, default=320)
