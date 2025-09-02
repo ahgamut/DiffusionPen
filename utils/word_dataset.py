@@ -13,7 +13,7 @@ import random
 
 # import sys
 # import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 import cv2
 
 # OV = True
@@ -182,7 +182,6 @@ class WordLineDataset(Dataset):
             self.stopwords = self.stopwords[0]
 
         save_path = "./saved_iam_data"
-
         if os.path.exists(save_path) is False:
             os.makedirs(save_path, exist_ok=True)
         save_file = "{}/{}_{}_{}.pt".format(
@@ -201,9 +200,7 @@ class WordLineDataset(Dataset):
         self.initial_writer_ids = [d[2] for d in data]
 
         writer_ids, _ = np.unique([d[2] for d in data], return_inverse=True)
-
         self.writer_ids = writer_ids
-
         self.wclasses = len(writer_ids)
         print("Number of writers", self.wclasses)
         if self.character_classes is None:
@@ -214,7 +211,6 @@ class WordLineDataset(Dataset):
                 res.update(list(transcr))
                 self.max_transcr_len = max(self.max_transcr_len, len(transcr))
                 # print('self.max_transcr_len', self.max_transcr_len)
-
             res = sorted(list(res))
             res.append(" ")
             print(
@@ -228,100 +224,7 @@ class WordLineDataset(Dataset):
     def __len__(self):
         return len(self.data)
 
-    @staticmethod
-    def draw_word(word: str) -> Image:
-        # Define the target image width and height
-        target_width = 256
-        target_height = 64
-
-        # Calculate the appropriate font size based on the target width and word length
-        max_font_size = 45
-        text_width, text_height = float("inf"), float("inf")
-        font_size = max_font_size
-        while text_width > target_width or text_height > target_height:
-            font_size -= 1
-            font = ImageFont.truetype("./Roboto-Regular.ttf", font_size)
-            _, _, text_width, text_height = font.getbbox(word)
-
-        # Create a white image with the target dimensions
-        img = Image.new("RGB", (target_width, target_height), color=(255, 255, 255))
-        d = ImageDraw.Draw(img)
-
-        # Calculate the position to center the text
-        position = ((target_width - text_width) / 2, (target_height - text_height) / 2)
-
-        # Draw the text onto the image
-        d.text(position, word, font=font, fill=0)
-
-        return img
-
-    @staticmethod
-    def find_text_bounding_box(image):
-        # Load the image
-        # image = cv2.imread(image_path)
-        # Convert the image to grayscale
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        gray = cv2.bitwise_not(gray)
-
-        # Threshold the image to separate black text from the background
-        _, thresh = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
-
-        # Find contours in the binary image
-        contours, _ = cv2.findContours(
-            thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        # print("Number of contours detected:", len(contours))
-        cnts = np.concatenate(contours)
-        x, y, w, h = cv2.boundingRect(cnts)
-        cv2.rectangle(image, (x, y), (x + w - 1, y + h - 1), (255, 0, 0), 1)
-        # cv2.imwrite('./new.png', image)
-
-        return (x, y, w, h)
-
-    @staticmethod
-    def draw_word_in_bounding_box(word: str, bounding_box: tuple) -> Image:
-        # bounding_box is a tuple (x1, y1, x2, y2) specifying the top-left (x1, y1) and
-        # bottom-right (x2, y2) coordinates of the bounding box
-
-        # Create a white image with the target dimensions (64x256)
-        target_width = 256
-        target_height = 64
-        img = Image.new("RGB", (target_width, target_height), color=(255, 255, 255))
-        d = ImageDraw.Draw(img)
-
-        # Calculate the width and height of the bounding box
-        box_width = bounding_box[2] - bounding_box[0]
-        box_height = bounding_box[3] - bounding_box[1]
-
-        # Calculate the appropriate font size based on the bounding box dimensions and word length
-        max_font_size = 50
-        font_size = max_font_size
-
-        while True:
-            # Load the font
-            font = ImageFont.truetype("./Roboto-Regular.ttf", font_size)
-
-            # Get the size of the text with the current font
-            text_width, text_height = d.textsize(word, font=font)
-
-            # Check if the text fits within the bounding box
-            if text_width <= box_width and text_height <= box_height:
-                break  # The text fits, exit the loop
-            else:
-                font_size -= 1  # Reduce font size and try again
-
-        # Calculate the position to center the text within the bounding box
-        x = bounding_box[0] + (box_width - text_width) / 2
-        y = bounding_box[1] + (box_height - text_height) / 2
-        position = (x, y)
-
-        # Draw the text onto the image
-        d.text(position, word, font=font, fill=0)
-
-        return img
-
     def __getitem__(self, index):
-
         img = self.data[index][0]
         img_path = self.data[index][3]
         if self.transforms is not None:
@@ -354,7 +257,6 @@ class WordLineDataset(Dataset):
         """
         pos_image = random.sample(positive_samples, k=1)
         neg_image = random.sample(negative_samples, k=1)
-        
         pos_image = pos_image[0][0]
         neg_image = neg_image[0][0]
         pos_image = self.transforms(pos_image)
