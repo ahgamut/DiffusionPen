@@ -450,32 +450,16 @@ def train_triplet(
 
 
 def build_IAMDataset(args):
-    myDataset = IAMDataset_style
-    # dataset_folder = '/usr/share/datasets_ianos'
-    dataset_folder = "/path/to/iam_data/"
+    dataset_folder = args.data_path
     aug_transforms = [lambda x: affine_transformation(x, s=0.1)]
-
     train_transform = transforms.Compose(
         [
-            # transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize(
-                (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
-            ),  # transforms.Normalize((0.5,), (0.5,)),  #
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ]
     )
 
-    val_transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize(
-                (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
-            ),  # transforms.Normalize((0.5,), (0.5,)),  #
-        ]
-    )
-
-    # train_data = myDataset(dataset_folder, 'train', 'word', fixed_size=(1 * 64, 256), tokenizer=None, text_encoder=None, feat_extractor=None, transforms=train_transform, args=args)
-    train_data = myDataset(
+    train_data = IAMStyleDataset(
         dataset_folder,
         "train",
         "word",
@@ -483,7 +467,6 @@ def build_IAMDataset(args):
         transforms=train_transform,
     )
 
-    # print('len train data', len(train_data))
     # split with torch.utils.data.Subset into train and val
     validation_size = int(0.2 * len(train_data))
 
@@ -506,9 +489,7 @@ def build_IAMDataset(args):
     val_loader = DataLoader(
         val_data, batch_size=args.batch_size, shuffle=False, num_workers=4
     )
-    if val_loader is not None:
-        print("Val data")
-    else:
+    if val_loader is None:
         print("No validation data")
 
     style_classes = 339
@@ -549,6 +530,7 @@ def main():
         help="type of cnn to use (resnet, densenet, etc.)",
     )
     parser.add_argument("--dataset", type=str, default="iam", help="dataset name")
+    parser.add_argument("--data-path", default="./iam_data", help="path to data")
     parser.add_argument(
         "--batch_size", type=int, default=320, help="input batch size for training"
     )
@@ -641,7 +623,6 @@ def main():
             device,
             args,
         )
-        print("finished training")
 
     elif args.mode == "triplet":
         train(
@@ -654,13 +635,12 @@ def main():
             device,
             args,
         )
-        print("finished training")
 
     elif args.mode == "classification":
         train_classification(
             model, train_loader, val_loader, optimizer_ft, scheduler, device, args
         )
-        print("finished training")
+    print("finished training")
 
 
 if __name__ == "__main__":
