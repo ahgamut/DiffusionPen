@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torchvision.models as models
+from torch.nn.functional import cross_entropy
 from torchvision import transforms
 from torch.utils.data import DataLoader, Dataset, random_split
 import numpy as np
@@ -32,8 +33,9 @@ from models import ImageEncoder, AvgMeter
 
 # ================ Performance and Loss Function ========================
 def performance(pred, label):
-    loss = nn.CrossEntropyLoss()
-    loss = loss(pred, label)
+    # loss = nn.CrossEntropyLoss()
+    # loss = loss(pred, label)
+    loss = cross_entropy(pred, label)
     return loss
 
 
