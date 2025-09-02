@@ -51,8 +51,7 @@ def train_class_epoch(model, training_data, optimizer, args):
     for i, data in enumerate(pbar):
 
         image = data[0].to(args.device)
-        if args.dataset == "iam":
-            label = data[2].to(args.device)
+        label = data[2].to(args.device)
 
         optimizer.zero_grad()
 
@@ -89,8 +88,7 @@ def eval_class_epoch(model, validation_data, args):
 
             image = data[0].to(args.device)
             image_paths = data[4]
-            if args.dataset == "iam":
-                label = data[2].to(args.device)
+            label = data[2].to(args.device)
 
             output = model(image)
 
@@ -122,12 +120,10 @@ def train_epoch_triplet(train_loader, model, criterion, optimizer, device, args)
     for i, data in enumerate(pbar):
 
         img = data[0]
-
-        if args.dataset == "iam":
-            wid = data[2]
-            # print('wid', wid)
-            positive = data[3]
-            negative = data[4]
+        wid = data[2]
+        # print('wid', wid)
+        positive = data[3]
+        negative = data[4]
 
         anchor = img.to(device)
         positive = positive.to(device)
@@ -164,11 +160,9 @@ def val_epoch_triplet(val_loader, model, criterion, optimizer, device, args):
 
         img = data[0]
         # transcr = data[1]
-
-        if args.dataset == "iam":
-            wid = data[2]
-            positive = data[3]
-            negative = data[4]
+        wid = data[2]
+        positive = data[3]
+        negative = data[4]
 
         anchor = img.to(device)
         positive = positive.to(device)
