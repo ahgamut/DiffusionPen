@@ -90,7 +90,9 @@ def range_check(x):
 
 def build_fakes(
     pieces,
+    s,
     args,
+    diffusion,
     ema_model,
     vae,
     feature_extractor,
@@ -477,7 +479,9 @@ def main():
             # build fake words
             fakes, max_word_length_width = build_fakes(
                 pieces,
+                s=s,
                 args=args,
+                diffusion=diffusion,
                 ema_model=ema_model,
                 vae=vae,
                 feature_extractor=feature_extractor,
@@ -505,7 +509,8 @@ def main():
         except Exception as e:
             print("failed for", s)
             print(e)
-            print(traceback.format_tb(sys.exc_info()[2]))
+            tb = traceback.format_tb(sys.exc_info()[2])
+            print("".join(tb))
 
 
 if __name__ == "__main__":
