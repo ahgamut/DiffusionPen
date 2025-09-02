@@ -521,54 +521,6 @@ class WordLineDataset(Dataset):
         else:
             return img
 
-    def print_random_sample(self, image, transcription, id, as_saved_files=True):
-        import random  #   Create method that will show example images using graphics-in-console (e.g. TerminalImageViewer)
-        from PIL import Image
-
-        # Run this with a very low probability
-        x = random.randint(0, 10000)
-        if x > 5:
-            return
-
-        def show_image(img):
-            def get_ansi_color_code(r, g, b):
-                if r == g and g == b:
-                    if r < 8:
-                        return 16
-                    if r > 248:
-                        return 231
-                    return round(((r - 8) / 247) * 24) + 232
-                return (
-                    16
-                    + (36 * round(r / 255 * 5))
-                    + (6 * round(g / 255 * 5))
-                    + round(b / 255 * 5)
-                )
-
-            def get_color(r, g, b):
-                return "\x1b[48;5;{}m \x1b[0m".format(int(get_ansi_color_code(r, g, b)))
-
-            h = 12
-            w = int((img.width / img.height) * h)
-            img = img.resize((w, h))
-            img_arr = np.asarray(img)
-            h, w = img_arr.shape  # ,c
-            for x in range(h):
-                for y in range(w):
-                    pix = img_arr[x][y]
-                    print(get_color(pix, pix, pix), sep="", end="")
-                    # print(get_color(pix[0], pix[1], pix[2]), sep='', end='')
-                print()
-
-        if as_saved_files:
-            Image.fromarray(np.uint8(image * 255.0)).save(
-                "/tmp/a{}_{}.png".format(id, transcription)
-            )
-        else:
-            print('Id = {}, Transcription = "{}"'.format(id, transcription))
-            show_image(Image.fromarray(255.0 * image))
-            print()
-
 
 class IAMDataset_style(WordLineDataset):
     def __init__(self, basefolder, subset, segmentation_level, fixed_size, transforms):
