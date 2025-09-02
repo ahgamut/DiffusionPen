@@ -21,13 +21,14 @@ import random
 
 #
 from utils.word_dataset import LineListIO
-from utils.style_dataset import WordStyleDataset # never used?
+from utils.style_dataset import WordStyleDataset  # never used?
 from utils.auxilary_functions import (
     affine_transformation,
     image_resize_PIL,
     centered_PIL,
 )
 from models import ImageEncoder, AvgMeter
+
 
 class WordLineDataset(Dataset):
     #
@@ -373,22 +374,14 @@ class IAMDataset_style(WordLineDataset):
     def __init__(self, basefolder, subset, segmentation_level, fixed_size, transforms):
         super().__init__(basefolder, subset, segmentation_level, fixed_size, transforms)
         self.setname = "IAM"
-        self.trainset_file = "{}/{}/set_split/trainset.txt".format(
-            self.basefolder, self.setname
-        )
-        self.valset_file = "{}/{}/set_split/validationset1.txt".format(
-            self.basefolder, self.setname
-        )
-        self.testset_file = "{}/{}/set_split/testset.txt".format(
-            self.basefolder, self.setname
-        )
-        self.line_file = "{}/ascii/lines.txt".format(self.basefolder, self.setname)
-        self.word_file = "./iam_data/ascii/words.txt".format(
-            self.basefolder, self.setname
-        )
-        self.word_path = "{}/words".format(self.basefolder, self.setname)
-        self.line_path = "{}/lines".format(self.basefolder, self.setname)
-        self.forms = "./iam_data/ascii/forms.txt"
+        self.trainset_file = "{}/set_split/trainset.txt".format(self.basefolder)
+        self.valset_file = "{}/set_split/validationset1.txt".format(self.basefolder)
+        self.testset_file = "{}/set_split/testset.txt".format(self.basefolder)
+        self.line_file = "{}/ascii/lines.txt".format(self.basefolder)
+        self.word_file = "{}/ascii/words.txt".format(self.basefolder)
+        self.word_path = "{}/words".format(self.basefolder)
+        self.line_path = "{}/lines".format(self.basefolder)
+        self.forms = "{}/ascii/forms.txt".format(self.basefolder)
         # self.stopwords_path = '{}/{}/iam-stopwords'.format(self.basefolder, self.setname)
         super().__finalize__()
 
@@ -914,7 +907,9 @@ def train_classification(
 
         scheduler.step()
 
+
 ###
+
 
 def train_triplet(
     model, train_loader, val_loader, criterion, optimizer, scheduler, device, args
@@ -943,7 +938,9 @@ def train_triplet(
 
         scheduler.step(val_loss)
 
+
 ### BUILDING DATASETS
+
 
 def build_IAMDataset(args):
     myDataset = IAMDataset_style
@@ -1010,7 +1007,9 @@ def build_IAMDataset(args):
     style_classes = 339
     return train_data, val_data, train_loader, val_loader, style_classes
 
+
 ###
+
 
 def load_pretrained_weights(model, device, pretrained, style_path):
     print(
