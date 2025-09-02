@@ -21,7 +21,6 @@ def affine_transformation(img, m=1.0, s=0.2, border_value=None):
 
 
 def image_resize(img, height=None, width=None):
-
     if height is not None and width is None:
         scale = float(height) / float(img.shape[0])
         width = int(scale * img.shape[1])
@@ -31,7 +30,6 @@ def image_resize(img, height=None, width=None):
         height = int(scale * img.shape[0])
 
     img = resize(image=img, output_shape=(height, width)).astype(np.float32)
-
     return img
 
 
@@ -60,7 +58,6 @@ def image_resize_PIL(img, height=None, width=None):
 
 
 def centered(word_img, tsize, centering=(0.5, 0.5), border_value=None):
-
     height = tsize[0]
     width = tsize[1]
 
@@ -93,7 +90,6 @@ def centered(word_img, tsize, centering=(0.5, 0.5), border_value=None):
 
 
 def centered_PIL(word_img, tsize, centering=(0.5, 0.5), border_value=None):
-
     height = tsize[0]
     width = tsize[1]
     # print('word_img.size', word_img.size)
@@ -119,9 +115,7 @@ def centered_PIL(word_img, tsize, centering=(0.5, 0.5), border_value=None):
         border_value = np.median(word_img)
 
     res = Image.new("RGB", (width, height), color=(255, 255, 255))
-
     res.paste(word_img, (padw[0], padh[0]))
-
     return res
 
 
