@@ -30,7 +30,7 @@ from utils.auxilary_functions import (
 from models import ImageEncoder, AvgMeter
 
 
-class WordLineDataset(Dataset):
+class WLStyleDataset(Dataset):
     #
     # TODO list:
     #
@@ -358,7 +358,7 @@ class WordLineDataset(Dataset):
             return img
 
 
-class IAMDataset_style(WordLineDataset):
+class IAMStyleDataset(WLStyleDataset):
     def __init__(self, basefolder, subset, segmentation_level, fixed_size, transforms):
         super().__init__(basefolder, subset, segmentation_level, fixed_size, transforms)
         self.setname = "IAM"
