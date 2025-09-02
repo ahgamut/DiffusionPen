@@ -1067,6 +1067,7 @@ def train_classification(
 
         scheduler.step()
 
+###
 
 def train_triplet(
     model, train_loader, val_loader, criterion, optimizer, scheduler, device, args
@@ -1095,6 +1096,7 @@ def train_triplet(
 
         scheduler.step(val_loss)
 
+### BUILDING DATASETS
 
 def build_IAMDataset(args):
     myDataset = IAMDataset_style
@@ -1161,6 +1163,7 @@ def build_IAMDataset(args):
     style_classes = 339
     return train_data, val_data, train_loader, val_loader, style_classes
 
+###
 
 def load_pretrained_weights(model, device, pretrained, style_path):
     print(
