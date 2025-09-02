@@ -112,7 +112,7 @@ class IAMDataset(WordLineDataset):
             gt = []
             form_writer_dict = {}
 
-            dict_path = f"utils/writers_dict_{subset}.json"
+            dict_path = f"utils/writers_dict_{subset}_iam.json"
             # open dict file
             with open(dict_path, "r") as f:
                 wr_dict = json.load(f)
