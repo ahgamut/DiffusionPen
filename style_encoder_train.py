@@ -461,7 +461,6 @@ class IAMStyleDataset(WLStyleDataset):
 
         info = gather_iam_info(self, subset, segmentation_level)
         data = []
-        widths = []
         for i, (img_path, transcr, writer_name) in enumerate(info):
             if i % 1000 == 0:
                 print(
@@ -472,24 +471,15 @@ class IAMStyleDataset(WLStyleDataset):
             #
 
             try:
-                # print('img_path', img_path + '.png')
                 img = Image.open(img_path + ".png").convert("RGB")  # .convert('L')
-                # print('img shape PIL', img.size)
-                # img = image_resize_PIL(img, height=64)
-
                 if img.height < 64 and img.width < 256:
                     img = img
                 else:
                     img = image_resize_PIL(img, height=img.height // 2)
 
-                # widths.append(img.size[0])
-
             except:
+                print('Could not add image file {}.png'.format(img_path))
                 continue
-
-            # except:
-            #    print('Could not add image file {}.png'.format(img_path))
-            #    continue
 
             # transform iam transcriptions
             transcr = transcr.replace(" ", "")
@@ -501,8 +491,7 @@ class IAMStyleDataset(WLStyleDataset):
                 transcr = transcr.replace("|'" + cc.upper(), "'" + cc.upper())
 
             transcr = transcr.replace("|", " ")
-
-            data += [(img, transcr, writer_name, img_path)]
+            data.append((img, transcr, writer_name, img_path))
 
         return data
 
