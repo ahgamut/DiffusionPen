@@ -772,52 +772,9 @@ class IAMDataset_style(WordLineDataset):
         return data
 
 
-class Mixed_Encoder(nn.Module):
-    """
-    Encode images to a fixed size vector
-    """
-
-    def __init__(
-        self, model_name="resnet50", num_classes=339, pretrained=True, trainable=True
-    ):
-        super().__init__()
-        self.model = timm.create_model(
-            model_name, pretrained, num_classes=0, global_pool=""
-        )
-        # Add a global average pooling layer
-        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
-
-        # Create the classifier
-        if hasattr(self.model, "num_features"):
-            num_features = self.model.num_features
-        else:
-            # Fallback, can be adjusted based on the specific model
-            num_features = 2048
-
-        self.classifier = nn.Linear(num_features, num_classes)
-
-        for p in self.model.parameters():
-            p.requires_grad = trainable
-
-    def forward(self, x):
-        # Extract features
-        features = self.model(x)
-
-        # Pool the features to make them of fixed size
-        pooled_features = self.global_pool(features).flatten(1)
-
-        # Classify
-        logits = self.classifier(pooled_features)
-        # print('logits', logits.shape)
-        # print('pooled_features', pooled_features.shape)
-        return logits, pooled_features
-
-
 # ================ Performance and Loss Function ========================
 def performance(pred, label):
-
     loss = nn.CrossEntropyLoss()
-
     loss = loss(pred, label)
     return loss
 
@@ -899,7 +856,6 @@ def eval_class_epoch(model, validation_data, args):
 
 ########################################################################
 def train_epoch_triplet(train_loader, model, criterion, optimizer, device, args):
-
     model.train()
     running_loss = 0
     total = 0
@@ -943,7 +899,6 @@ def train_epoch_triplet(train_loader, model, criterion, optimizer, device, args)
 
 
 def val_epoch_triplet(val_loader, model, criterion, optimizer, device, args):
-
     running_loss = 0
     total = 0
     pbar = tqdm(val_loader)
@@ -1297,8 +1252,28 @@ def build_IAMDataset(args):
         print("No validation data")
 
     style_classes = 339
-
     return train_data, val_data, train_loader, val_loader, style_classes
+
+
+def load_pretrained_weights(model, device, pretrained, style_path):
+    print(
+        "Number of model parameters: {}".format(
+            sum([p.data.nelement() for p in model.parameters()])
+        )
+    )
+    if pretrained == True:
+        assert style_path != "", "need to provide style_path"
+        state_dict = torch.load(style_path, map_location=device, weights_only=True)
+        model_dict = model.state_dict()
+        sub_dict = dict()
+        for k, v in state_dict.items():
+            if k in model_dict and model_dict[k].shape == v.shape:
+                sub_dict[k] = v
+            else:
+                print("skipping pretrained weights for: ", k)
+        model_dict.update(sub_dict)
+        model.load_state_dict(model_dict)
+        print("Pretrained model loaded")
 
 
 def main():
@@ -1324,6 +1299,7 @@ def main():
     parser.add_argument(
         "--pretrained", type=bool, default=False, help="use of feature extractor or not"
     )
+    parser.add_argument("--style-path", default="./style_models", help="style path")
     parser.add_argument(
         "--device",
         type=str,
@@ -1352,7 +1328,7 @@ def main():
             build_IAMDataset(args)
         )
     else:
-        print(
+        raise RuntimeError(
             "You need to add your own dataset and define the number of style classes!!!"
         )
 
@@ -1364,25 +1340,8 @@ def main():
             pretrained=True,
             trainable=True,
         )
-        print(
-            "Number of model parameters: {}".format(
-                sum([p.data.nelement() for p in model.parameters()])
-            )
-        )
-        if args.pretrained == True:
-            state_dict = torch.load(PATH, map_location=args.device, weights_only=True)
-            model_dict = model.state_dict()
-            state_dict = {
-                k: v
-                for k, v in state_dict.items()
-                if k in model_dict and model_dict[k].shape == v.shape
-            }
-            model_dict.update(state_dict)
-            model.load_state_dict(model_dict)
-            # print(model)
-            print("Pretrained mobilenetv2_100 model loaded")
 
-    if args.model == "resnet18":
+    elif args.model == "resnet18":
         print("Using resnet18")
         model = ImageEncoder(
             model_name=args.model,
@@ -1390,29 +1349,12 @@ def main():
             pretrained=True,
             trainable=True,
         )
-        print("Model loaded")
-        # change layer to have 1 channel instead of 3
-        # model.model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        print(
-            "Number of model parameters: {}".format(
-                sum([p.data.nelement() for p in model.parameters()])
-            )
-        )
-        if args.pretrained == True:
-            PATH = ""
 
-            state_dict = torch.load(PATH, map_location=args.device, weights_only=True)
-            model_dict = model.state_dict()
-            state_dict = {
-                k: v
-                for k, v in state_dict.items()
-                if k in model_dict and model_dict[k].shape == v.shape
-            }
-            model_dict.update(state_dict)
-            model.load_state_dict(model_dict)
+    else:
+        raise RuntimeError("unknown model!")
 
+    load_pretrained_weights(model, args.device, args.pretrained, args.style_path)
     model = model.to(device)
-    # print(model)
     optimizer_ft = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.StepLR(optimizer_ft, step_size=3, gamma=0.1)
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -1420,6 +1362,7 @@ def main():
     )
     criterion = nn.TripletMarginLoss(margin=1.0, p=2)
 
+    # print(model)
     # THIS IS THE CONDITION FOR DIFFUSIONPEN
     if args.mode == "mixed":
         criterion_triplet = nn.TripletMarginLoss(margin=1.0, p=2)
@@ -1437,7 +1380,7 @@ def main():
         )
         print("finished training")
 
-    if args.mode == "triplet":
+    elif args.mode == "triplet":
         train(
             model,
             train_loader,
@@ -1451,7 +1394,6 @@ def main():
         print("finished training")
 
     elif args.mode == "classification":
-
         train_classification(
             model, train_loader, val_loader, optimizer_ft, scheduler, device, args
         )
