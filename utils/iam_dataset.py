@@ -1,11 +1,17 @@
 import numpy as np
 from skimage import io as img_io
-from utils.word_dataset import WordLineDataset
-from utils.auxilary_functions import image_resize_PIL, centered_PIL
 from PIL import Image, ImageOps
 import json
 import os
 import string
+
+#
+from utils.word_dataset import WordLineDataset
+from utils.auxilary_functions import (
+    image_resize_PIL,
+    centered_PIL,
+    get_default_character_classes,
+)
 
 
 class IAMDataset(WordLineDataset):
@@ -164,87 +170,8 @@ class IAMDataset(WordLineDataset):
         widths = []
         padded_imgs = 0
         padded_data = []
-        character_classes = [
-            "!",
-            '"',
-            "#",
-            "&",
-            "'",
-            "(",
-            ")",
-            "*",
-            "+",
-            ",",
-            "-",
-            ".",
-            "/",
-            "0",
-            "1",
-            "2",
-            "3",
-            "4",
-            "5",
-            "6",
-            "7",
-            "8",
-            "9",
-            ":",
-            ";",
-            "?",
-            "A",
-            "B",
-            "C",
-            "D",
-            "E",
-            "F",
-            "G",
-            "H",
-            "I",
-            "J",
-            "K",
-            "L",
-            "M",
-            "N",
-            "O",
-            "P",
-            "Q",
-            "R",
-            "S",
-            "T",
-            "U",
-            "V",
-            "W",
-            "X",
-            "Y",
-            "Z",
-            "a",
-            "b",
-            "c",
-            "d",
-            "e",
-            "f",
-            "g",
-            "h",
-            "i",
-            "j",
-            "k",
-            "l",
-            "m",
-            "n",
-            "o",
-            "p",
-            "q",
-            "r",
-            "s",
-            "t",
-            "u",
-            "v",
-            "w",
-            "x",
-            "y",
-            "z",
-            " ",
-        ]
+        character_classes = get_default_character_classes()
+
         for i, (img_path, transcr, writer_name) in enumerate(info):
 
             # transform iam transcriptions
