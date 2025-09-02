@@ -90,11 +90,8 @@ class WordLineDataset(Dataset):
         self.data = data
         # print('data', self.data)
         self.initial_writer_ids = [d[2] for d in data]
-
         writer_ids, _ = np.unique([d[2] for d in data], return_inverse=True)
-
         self.writer_ids = writer_ids
-
         self.wclasses = len(writer_ids)
         print("Number of writers", self.wclasses)
         if self.character_classes is None:
@@ -120,18 +117,13 @@ class WordLineDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, index):
-
         img = self.data[index][0]
-
         transcr = self.data[index][1]
-
         wid = self.data[index][2]
-
         img_path = self.data[index][3]
         # pick another sample that has the same self.data[2] or same writer id
         positive_samples = [p for p in self.data if p[2] == wid and len(p[1]) > 3]
         negative_samples = [n for n in self.data if n[2] != wid and len(n[1]) > 3]
-
         positive = random.choice(positive_samples)[0]
 
         # Make sure you have at least 5 matching images
@@ -192,7 +184,6 @@ class WordLineDataset(Dataset):
 
         # img = image_resize_PIL(img, height=int(1.0 * nheight), width=int(1.0 * nwidth))
         # img = centered_PIL(img, (fheight, fwidth), border_value=None).convert('L')
-
         # image = image.resize((256, 64), Image.ANTIALIAS)
         if img.width < 256:
             img = ImageOps.pad(
@@ -220,7 +211,6 @@ class WordLineDataset(Dataset):
             img_neg  # self.processor(img_neg, return_tensors="pt").pixel_values
         )
         pixel_values_pos = pixel_values_pos  # .squeeze(0)
-
         pixel_values_neg = pixel_values_neg  # .squeeze(0)
 
         st_imgs = []
@@ -251,7 +241,6 @@ class WordLineDataset(Dataset):
         s_imgs = torch.stack(st_imgs)
 
         if self.transforms is not None:
-
             img = self.transforms(img)
             img_pos = self.transforms(img_pos)
             img_neg = self.transforms(img_neg)
@@ -317,7 +306,6 @@ class WordLineDataset(Dataset):
         s_imgs = torch.stack(s_imgs)
 
         pixel_values_img = torch.stack(pixel_values_img)
-
         pixel_values_pos = torch.stack(pixel_values_pos)
         pixel_values_neg = torch.stack(pixel_values_neg)
 
