@@ -1,4 +1,6 @@
 import os
+import sys
+import traceback
 import torch
 import torch.nn as nn
 import numpy as np
@@ -469,34 +471,39 @@ def main():
     output_template = args.output.replace(".png", "-{s}.png")
     for s in range(writer_range[0], writer_range[1] + 1):
         print("Style:", s)
-        # build fake words
-        fakes, max_word_length_width = build_fakes(
-            pieces,
-            args=args,
-            ema_model=ema_model,
-            vae=vae,
-            feature_extractor=feature_extractor,
-            ddim=ddim,
-            transform=transform,
-            tokenizer=tokenizer,
-            text_encoder=text_encoder,
-            longest_word_length=longest_word_length,
-            max_word_length_width=max_word_length_width,
-        )
+        try:
+            # build fake words
+            fakes, max_word_length_width = build_fakes(
+                pieces,
+                args=args,
+                ema_model=ema_model,
+                vae=vae,
+                feature_extractor=feature_extractor,
+                ddim=ddim,
+                transform=transform,
+                tokenizer=tokenizer,
+                text_encoder=text_encoder,
+                longest_word_length=longest_word_length,
+                max_word_length_width=max_word_length_width,
+            )
 
-        # Scale and pad each word
-        scaled_padded_words = add_padding(
-            pieces,
-            fakes,
-            max_word_length_width=max_word_length_width,
-            longest_word_length=longest_word_length,
-        )
+            # Scale and pad each word
+            scaled_padded_words = add_padding(
+                pieces,
+                fakes,
+                max_word_length_width=max_word_length_width,
+                longest_word_length=longest_word_length,
+            )
 
-        # combine to create paragraph
-        paragraph_image = build_paragraph_image(
-            scaled_padded_words, max_line_width=max_line_width
-        )
-        paragraph_image.save(output_template.format(s=s))
+            # combine to create paragraph
+            paragraph_image = build_paragraph_image(
+                scaled_padded_words, max_line_width=max_line_width
+            )
+            paragraph_image.save(output_template.format(s=s))
+        except Exception as e:
+            print("failed for", s)
+            print(e)
+            print(traceback.format_tb(sys.exc_info()))
 
 
 if __name__ == "__main__":
