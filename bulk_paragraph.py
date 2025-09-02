@@ -13,14 +13,16 @@ import uuid
 import json
 from diffusers import AutoencoderKL, DDIMScheduler
 import random
-from models import EMA, Diffusion, UNetModel, ImageEncoder
 from torchvision import transforms
-from utils.iam_dataset import IAMDataset
-from utils.GNHK_dataset import GNHK_Dataset
-from utils.auxilary_functions import *
 from torchvision.utils import save_image
 from torch.nn import DataParallel
 from transformers import CanineModel, CanineTokenizer
+
+#
+from models import EMA, Diffusion, UNetModel, ImageEncoder
+from utils.iam_dataset import IAMDataset
+from utils.GNHK_dataset import GNHK_Dataset
+from utils.auxilary_functions import *
 
 torch.cuda.empty_cache()
 OUTPUT_MAX_LEN = 95  # + 2  # <GO>+groundtruth+<END>
@@ -347,87 +349,7 @@ def main():
         ]
     )
 
-    character_classes = [
-        "!",
-        '"',
-        "#",
-        "&",
-        "'",
-        "(",
-        ")",
-        "*",
-        "+",
-        ",",
-        "-",
-        ".",
-        "/",
-        "0",
-        "1",
-        "2",
-        "3",
-        "4",
-        "5",
-        "6",
-        "7",
-        "8",
-        "9",
-        ":",
-        ";",
-        "?",
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "G",
-        "H",
-        "I",
-        "J",
-        "K",
-        "L",
-        "M",
-        "N",
-        "O",
-        "P",
-        "Q",
-        "R",
-        "S",
-        "T",
-        "U",
-        "V",
-        "W",
-        "X",
-        "Y",
-        "Z",
-        "a",
-        "b",
-        "c",
-        "d",
-        "e",
-        "f",
-        "g",
-        "h",
-        "i",
-        "j",
-        "k",
-        "l",
-        "m",
-        "n",
-        "o",
-        "p",
-        "q",
-        "r",
-        "s",
-        "t",
-        "u",
-        "v",
-        "w",
-        "x",
-        "y",
-        "z",
-        " ",
-    ]
+    character_classes = get_default_character_classes()
 
     ######################### MODEL #######################################
     vocab_size = len(character_classes)

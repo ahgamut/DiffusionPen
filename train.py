@@ -429,87 +429,7 @@ def main():
         shuffle=False,
         num_workers=args.num_workers,
     )
-    character_classes = [
-        "!",
-        '"',
-        "#",
-        "&",
-        "'",
-        "(",
-        ")",
-        "*",
-        "+",
-        ",",
-        "-",
-        ".",
-        "/",
-        "0",
-        "1",
-        "2",
-        "3",
-        "4",
-        "5",
-        "6",
-        "7",
-        "8",
-        "9",
-        ":",
-        ";",
-        "?",
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "G",
-        "H",
-        "I",
-        "J",
-        "K",
-        "L",
-        "M",
-        "N",
-        "O",
-        "P",
-        "Q",
-        "R",
-        "S",
-        "T",
-        "U",
-        "V",
-        "W",
-        "X",
-        "Y",
-        "Z",
-        "a",
-        "b",
-        "c",
-        "d",
-        "e",
-        "f",
-        "g",
-        "h",
-        "i",
-        "j",
-        "k",
-        "l",
-        "m",
-        "n",
-        "o",
-        "p",
-        "q",
-        "r",
-        "s",
-        "t",
-        "u",
-        "v",
-        "w",
-        "x",
-        "y",
-        "z",
-        " ",
-    ]
+    character_classes = get_default_character_classes()
 
     ######################### MODEL #######################################
     vocab_size = len(character_classes)
@@ -562,9 +482,15 @@ def main():
     # load from last checkpoint
 
     if args.load_check == True:
-        unet.load_state_dict(torch.load(f"{args.save_path}/models/ckpt.pt", weights_only=True))
-        optimizer.load_state_dict(torch.load(f"{args.save_path}/models/optim.pt", weights_only=True))
-        ema_model.load_state_dict(torch.load(f"{args.save_path}/models/ema_ckpt.pt", weights_only=True))
+        unet.load_state_dict(
+            torch.load(f"{args.save_path}/models/ckpt.pt", weights_only=True)
+        )
+        optimizer.load_state_dict(
+            torch.load(f"{args.save_path}/models/optim.pt", weights_only=True)
+        )
+        ema_model.load_state_dict(
+            torch.load(f"{args.save_path}/models/ema_ckpt.pt", weights_only=True)
+        )
         print("Loaded models and optimizer")
 
     if args.latent == True:

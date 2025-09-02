@@ -13,14 +13,16 @@ import uuid
 import json
 from diffusers import AutoencoderKL, DDIMScheduler
 import random
-from models import EMA, Diffusion, UNetModel, ImageEncoder
+from torchvision.utils import save_image
+from torch.nn import DataParallel
 from torchvision import transforms
+from transformers import CanineModel, CanineTokenizer
+
+#
+from models import EMA, Diffusion, UNetModel, ImageEncoder
 from utils.iam_dataset import IAMDataset
 from utils.GNHK_dataset import GNHK_Dataset
 from utils.auxilary_functions import *
-from torchvision.utils import save_image
-from torch.nn import DataParallel
-from transformers import CanineModel, CanineTokenizer
 
 torch.cuda.empty_cache()
 OUTPUT_MAX_LEN = 95  # + 2  # <GO>+groundtruth+<END>
@@ -28,6 +30,7 @@ IMG_WIDTH = 256
 IMG_HEIGHT = 64
 
 PUNCTUATION = "_!\"#&'()*+,-./:;?"
+
 
 def setup_logging(args):
     # os.makedirs("models", exist_ok=True)
@@ -127,91 +130,11 @@ def main():
         ]
     )
 
-    character_classes = [
-        "!",
-        '"',
-        "#",
-        "&",
-        "'",
-        "(",
-        ")",
-        "*",
-        "+",
-        ",",
-        "-",
-        ".",
-        "/",
-        "0",
-        "1",
-        "2",
-        "3",
-        "4",
-        "5",
-        "6",
-        "7",
-        "8",
-        "9",
-        ":",
-        ";",
-        "?",
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "G",
-        "H",
-        "I",
-        "J",
-        "K",
-        "L",
-        "M",
-        "N",
-        "O",
-        "P",
-        "Q",
-        "R",
-        "S",
-        "T",
-        "U",
-        "V",
-        "W",
-        "X",
-        "Y",
-        "Z",
-        "a",
-        "b",
-        "c",
-        "d",
-        "e",
-        "f",
-        "g",
-        "h",
-        "i",
-        "j",
-        "k",
-        "l",
-        "m",
-        "n",
-        "o",
-        "p",
-        "q",
-        "r",
-        "s",
-        "t",
-        "u",
-        "v",
-        "w",
-        "x",
-        "y",
-        "z",
-        " ",
-    ]
+    character_classes = get_default_character_classes()
 
     ######################### MODEL #######################################
     vocab_size = len(character_classes)
-    style_classes = 339 # for IAM Dataset
+    style_classes = 339  # for IAM Dataset
     print("Vocab size: ", vocab_size)
 
     if args.dataparallel == True:
@@ -261,9 +184,15 @@ def main():
     # load from last checkpoint
 
     if args.load_check == True:
-        unet.load_state_dict(torch.load(f"{args.save_path}/models/ckpt.pt", weights_only=True))
-        optimizer.load_state_dict(torch.load(f"{args.save_path}/models/optim.pt", weights_only=True))
-        ema_model.load_state_dict(torch.load(f"{args.save_path}/models/ema_ckpt.pt", weights_only=True))
+        unet.load_state_dict(
+            torch.load(f"{args.save_path}/models/ckpt.pt", weights_only=True)
+        )
+        optimizer.load_state_dict(
+            torch.load(f"{args.save_path}/models/optim.pt", weights_only=True)
+        )
+        ema_model.load_state_dict(
+            torch.load(f"{args.save_path}/models/ema_ckpt.pt", weights_only=True)
+        )
         print("Loaded models and optimizer")
 
     if args.latent == True:
@@ -302,14 +231,24 @@ def main():
     print("Sampling started....")
 
     unet.load_state_dict(
-        torch.load(f"{args.save_path}/models/ckpt.pt", map_location=args.device, weights_only=True)
+        torch.load(
+            f"{args.save_path}/models/ckpt.pt",
+            map_location=args.device,
+            weights_only=True,
+        )
     )
     print("unet loaded")
     unet.eval()
 
     ema = EMA(0.995)
     ema_model = copy.deepcopy(unet).eval().requires_grad_(False)
-    ema_model.load_state_dict(torch.load(f"{args.save_path}/models/ema_ckpt.pt", map_location=args.device, weights_only=True))
+    ema_model.load_state_dict(
+        torch.load(
+            f"{args.save_path}/models/ema_ckpt.pt",
+            map_location=args.device,
+            weights_only=True,
+        )
+    )
     ema_model.eval()
 
     print("Sampling paragraph")
