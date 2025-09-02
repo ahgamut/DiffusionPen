@@ -466,9 +466,11 @@ def main():
     lines = open(args.text_file).read()
     pieces = lines.strip().split(" ")
     max_line_width = args.max_line_width
+    max_word_length_width = 0
     longest_word_length = max(len(word) for word in pieces)
 
     output_template = args.output.replace(".png", "-{s}.png")
+    writer_range = args.writer_range
     for s in range(writer_range[0], writer_range[1] + 1):
         print("Style:", s)
         try:
@@ -503,7 +505,7 @@ def main():
         except Exception as e:
             print("failed for", s)
             print(e)
-            print(traceback.format_tb(sys.exc_info()))
+            print(traceback.format_tb(sys.exc_info()[2]))
 
 
 if __name__ == "__main__":
