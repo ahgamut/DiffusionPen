@@ -163,7 +163,7 @@ def build_IAMDataset(args, transform):
     test_data, _ = random_split(
         train_data, [test_size, rest], generator=torch.Generator().manual_seed(42)
     )
-    return train_data, test_data
+    return train_data, test_data, style_classes
 
 
 def build_GNHKDataset(args, transform):
@@ -194,7 +194,7 @@ def build_GNHKDataset(args, transform):
     test_data, _ = random_split(
         train_data, [test_size, rest], generator=torch.Generator().manual_seed(42)
     )
-    return train_data, test_data
+    return train_data, test_data, style_classes
 
 
 def train(
@@ -352,43 +352,63 @@ def train(
             )
 
 
+def load_style_weights(model, device, style_path):
+    print(
+        "Number of model parameters: {}".format(
+            sum([p.data.nelement() for p in model.parameters()])
+        )
+    )
+    state_dict = torch.load(style_path, map_location=device, weights_only=True)
+    model_dict = model.state_dict()
+    sub_dict = dict()
+    for k, v in state_dict.items():
+        if k in model_dict and model_dict[k].shape == v.shape:
+            sub_dict[k] = v
+        else:
+            print("skipping style weights for: ", k)
+    model_dict.update(sub_dict)
+    model.load_state_dict(model_dict)
+    print("Pretrained style model loaded")
+
+
 def main():
     """Main function"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=1000)
-    parser.add_argument("--batch_size", type=int, default=320)
-    parser.add_argument("--num_workers", type=int, default=4)
+    parser.add_argument("--batch-size", type=int, default=320)
+    parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument(
-        "--model_name",
+        "--model-name",
         type=str,
         default="diffusionpen",
         help="(deprecated)",
     )
     parser.add_argument("--level", type=str, default="word", help="word, line")
-    parser.add_argument("--img_size", type=int, default=(64, 256))
+    parser.add_argument("--img-size", type=int, default=(64, 256))
     parser.add_argument("--dataset", type=str, default="iam", help="iam, gnhk")
     # UNET parameters
     parser.add_argument("--channels", type=int, default=4)
-    parser.add_argument("--emb_dim", type=int, default=320)
-    parser.add_argument("--num_heads", type=int, default=4)
-    parser.add_argument("--num_res_blocks", type=int, default=1)
+    parser.add_argument("--emb-dim", type=int, default=320)
+    parser.add_argument("--num-heads", type=int, default=4)
+    parser.add_argument("--num-res_blocks", type=int, default=1)
     parser.add_argument(
-        "--save_path", type=str, default="./diffusionpen_iam_model_path"
+        "--save-path", type=str, default="./diffusionpen_iam_model_path"
     )
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--color", type=bool, default=True)
     parser.add_argument("--latent", type=bool, default=True)
-    parser.add_argument("--img_feat", type=bool, default=True)
+    parser.add_argument("--img-feat", type=bool, default=True)
     parser.add_argument("--interpolation", type=bool, default=False)
     parser.add_argument("--dataparallel", type=bool, default=False)
-    parser.add_argument("--load_check", type=bool, default=False)
-    parser.add_argument("--sampling_word", type=bool, default=False)
-    parser.add_argument("--mix_rate", type=float, default=None)
+    parser.add_argument("--load-check", type=bool, default=False)
+    parser.add_argument("--sampling-word", type=bool, default=False)
+    parser.add_argument("--mix-rate", type=float, default=None)
+    parser.add_argument("--style-name", default="mobilenetv2_100", type=str)
     parser.add_argument(
-        "--style_path", type=str, default="./style_models/iam_style_diffusionpen.pth"
+        "--style-path", type=str, default="./style_models/iam_style_diffusionpen.pth"
     )
     parser.add_argument(
-        "--stable_dif_path", type=str, default="./stable-diffusion-v1-5"
+        "--stable-dif-path", type=str, default="./stable-diffusion-v1-5"
     )
     args = parser.parse_args()
 
@@ -410,11 +430,14 @@ def main():
 
     if args.dataset == "iam":
         print("loading IAM")
-        train_data, test_data = build_IAMDataset(args, transform)
+        train_data, test_data, style_classes = build_IAMDataset(args, transform)
 
     elif args.dataset == "gnhk":
         print("loading GNHK")
-        train_data, test_data = build_GNHKDataset(args, transform)
+        train_data, test_data, style_classes = build_GNHKDataset(args, transform)
+
+    else:
+        raise ValueError("unknown dataset!")
 
     train_loader = DataLoader(
         train_data,
@@ -507,20 +530,17 @@ def main():
     ddim = DDIMScheduler.from_pretrained(args.stable_dif_path, subfolder="scheduler")
 
     #### STYLE ####
-    feature_extractor = ImageEncoder(
-        model_name="mobilenetv2_100", num_classes=0, pretrained=True, trainable=True
-    )
-    PATH = args.style_path
-
-    state_dict = torch.load(PATH, map_location=args.device, weights_only=True)
-    model_dict = feature_extractor.state_dict()
-    state_dict = {
-        k: v
-        for k, v in state_dict.items()
-        if k in model_dict and model_dict[k].shape == v.shape
-    }
-    model_dict.update(state_dict)
-    feature_extractor.load_state_dict(model_dict)
+    if args.style_name == "mobilenetv2_100":
+        feature_extractor = ImageEncoder(
+            model_name="mobilenetv2_100", num_classes=0, pretrained=True, trainable=True
+        )
+    elif args.style_name == "resnet18":
+        feature_extractor = ImageEncoder(
+            model_name="resnet18", num_classes=0, pretrained=True, trainable=True
+        )
+    else:
+        raise ValueError(f"unable to load style model {style_name}!")
+    load_style_weights(feature_extractor, args.device, args.style_path)
     feature_extractor = DataParallel(feature_extractor, device_ids=device_ids)
     feature_extractor = feature_extractor.to(args.device)
     feature_extractor.requires_grad_(False)
