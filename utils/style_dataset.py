@@ -1,3 +1,4 @@
+import torch
 from torchvision import transforms
 from torch.utils.data import DataLoader, Dataset, random_split
 import numpy as np
@@ -6,6 +7,7 @@ from os.path import isfile
 from skimage import io
 from torchvision.utils import save_image
 from skimage.transform import resize
+from tqdm import tqdm
 import os
 import json
 import random
@@ -652,6 +654,7 @@ class CVLStyleDataset(Dataset):
         self.trainset_file = "utils/splits_words/cvl_train_val.txt"
         self.valset_file = "utils/splits_words/cvl_val.txt"
         self.testset_file = "utils/splits_words/cvl_test.txt"
+        self.windexmap_file = "utils/splits_words/writers_dict_cvl.json"
         self.finalize()
 
     def finalize(self):
@@ -666,7 +669,7 @@ class CVLStyleDataset(Dataset):
             save_path, self.subset, self.segmentation_level, self.setname
         )
         if isfile(save_file):
-            raw = torch.load(save_file)
+            raw = torch.load(save_file, weights_only=False)  # safety issue
             print("loaded save file", save_file)
         else:
             raw = self.main_loader(self.subset, self.segmentation_level)
@@ -675,9 +678,13 @@ class CVLStyleDataset(Dataset):
         self.img_paths = raw["paths"]
         self.data = raw["data"]
         self.wmap = raw["wmap"]
+        self.windex_forward = json.load(open(self.windexmap_file))  # writer id to 0-309
+        self.windex_backward = {
+            v: k for k, v in self.windex_forward.items()
+        }  # 0-309 to writer_id
         self.initial_writer_ids = [d[2] for d in self.data]
         self.writer_ids = list(self.wmap.keys())
-        self.wclasses = len(writer_ids)
+        self.wclasses = len(self.writer_ids)
         print("Number of writers in", self.segmentation_level, ":", self.wclasses)
 
         # compute character classes given input transcriptions
@@ -709,6 +716,7 @@ class CVLStyleDataset(Dataset):
         negative_wid = random.choice(self.writer_ids)
         while negative_wid == wid:
             negative_wid = random.choice(self.writer_ids)
+        negative_samples = self.wmap[negative_wid]
         negative = random.choice(negative_samples)
 
         # get the images
@@ -719,7 +727,7 @@ class CVLStyleDataset(Dataset):
             if zz.height < 64 and zz.width < 256:
                 return zz
             else:
-                return image_resize_PIL(zz, height=zz // 2)
+                return image_resize_PIL(zz, height=zz.height // 2)
 
         img = sizefix(img)
         img_pos = sizefix(img_pos)
@@ -753,8 +761,9 @@ class CVLStyleDataset(Dataset):
             img_pos = self.transforms(img_pos)
             img_neg = self.transforms(img_neg)
 
+        widi = self.windex_forward[wid]  # 0-309
         # why return image path?
-        return img, transcr, wid, img_pos, img_neg, "why"
+        return img, transcr, widi, img_pos, img_neg, "why"
 
     def collate_fn(self, batch):
         img, transcr, wid, positive, negative, img_path = zip(*batch)
@@ -772,10 +781,10 @@ class CVLStyleDataset(Dataset):
         result = []
         for l in lines:
             spl = l.split(",")
-            img_path = str(spl[0])
-            writer_id = int(spl[1])
+            rel_path = str(spl[0])
+            writer_id = str(spl[1])
             transcr = str(",".join(spl[2:]))
-            result.append((img_path, transcr, writer_id))
+            result.append((rel_path, transcr, writer_id))
         return result
 
     @staticmethod
@@ -793,33 +802,34 @@ class CVLStyleDataset(Dataset):
 
     def main_loader(self, subset, segmentation_level) -> list:
         if subset == "train":
-            valid_set = CVLStyleDataset.load_splits_text(self.train_file)
+            valid_set = CVLStyleDataset.load_splits_text(self.trainset_file)
         elif subset == "val":
-            valid_set = CVLStyleDataset.load_splits_text(self.val_file)
+            valid_set = CVLStyleDataset.load_splits_text(self.valset_file)
         elif subset == "test":
-            valid_set = CVLStyleDataset.load_splits_text(self.test_file)
+            valid_set = CVLStyleDataset.load_splits_text(self.testset_file)
         else:
             raise ValueError("can't pick subset")
 
         data = []
         paths = []
         wmap = dict()
-        for i, (img_path, transcr, writer_id) in enumerate(valid_set):
-            img = Image.open(img_path + ".png").convert("RGB")  # .convert('L')
+        for i, (rel_path, transcr, writer_id) in enumerate(valid_set):
+            img_path = os.path.join(self.basefolder, rel_path)
+            img = Image.open(img_path).convert("RGB")  # .convert('L')
             if img.height < self.fixed_size[0] and img.width < self.fixed_size[1]:
                 img = img
             else:
                 img = image_resize_PIL(img, height=img.height // 2)
 
-            transcr = CVLStyleDataset.fix_transcription(transcr)
+            transcr = CVLStyleDataset.fix_transcriptions(transcr)
             obj = (img, transcr, writer_id)
-            if writer_id in writer_maps:
+            if writer_id in wmap.keys():
                 wmap[writer_id].append(i)
             else:
                 wmap[writer_id] = [i]
             # data[i] = obj
             data.append(obj)
-            paths.append(img_path)
+            paths.append(rel_path)
 
         raw = {"data": data, "paths": paths, "wmap": wmap}
         return raw

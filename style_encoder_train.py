@@ -211,11 +211,10 @@ def train_epoch_mixed(
     loss_meter_class = AvgMeter()
     pbar = tqdm(train_loader)
     for i, data in enumerate(pbar):
-
         img = data[0]
-        wid = data[3].to(device)
-        positive = data[4].to(device)
-        negative = data[5].to(device)
+        wid = data[2].to(device)
+        positive = data[3].to(device)
+        negative = data[4].to(device)
 
         anchor = img.to(device)
         # Get logits and features from the model
@@ -276,9 +275,9 @@ def val_epoch_mixed(
     for i, data in enumerate(pbar):
 
         img = data[0].to(device)
-        wid = data[3].to(device)
-        positive = data[4].to(device)
-        negative = data[5].to(device)
+        wid = data[2].to(device)
+        positive = data[3].to(device)
+        negative = data[4].to(device)
 
         anchor = img
         anchor_logits, anchor_features = model(anchor)
@@ -511,9 +510,8 @@ def build_CVLDataset(args):
     )
 
     train_data = CVLStyleDataset(
-        dataset_folder,
-        "train",
-        "word",
+        basefolder=dataset_folder,
+        subset="train",
         fixed_size=(1 * 64, 256),
         transforms=train_transform,
     )
@@ -591,7 +589,10 @@ def main():
         help="number of training epochs",
     )
     parser.add_argument(
-        "--pretrained", type=bool, default=False, help="use of feature extractor or not"
+        "--pretrained",
+        dest="pretrained",
+        action="store_true",
+        help="use of feature extractor or not",
     )
     parser.add_argument("--style-path", default="./style_models", help="style path")
     parser.add_argument(
@@ -601,7 +602,7 @@ def main():
         help="device to use for training / testing",
     )
     parser.add_argument(
-        "--save_path", type=str, default="./style_models", help="path to save models"
+        "--save-path", type=str, default="./style_models", help="path to save models"
     )
     parser.add_argument(
         "--mode",
@@ -609,6 +610,7 @@ def main():
         default="mixed",
         help="mixed for DiffusionPen, triplet for DiffusionPen-triplet, or classification for DiffusionPen-triplet",
     )
+    parser.set_defaults(pretrained=False)
     args = parser.parse_args()
 
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")

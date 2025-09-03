@@ -2,6 +2,7 @@ import argparse
 import glob
 import os
 import random
+import json
 
 
 def dir_exists(x):
@@ -82,6 +83,14 @@ def get_wpath_coll(root_folder, only_ascii):
     return result
 
 
+def save_windexmap(fname, coll):
+    windex_forward = dict()
+    for i, wid in enumerate(sorted(coll.keys())):
+        windex_forward[wid] = i
+    with open(fname, "w") as f:
+        json.dump(windex_forward, f)
+
+
 def get_splits(wpath_coll, train_split):
     train_perc = train_split / 100.0
     test_perc = 1.0 - train_perc
@@ -115,7 +124,8 @@ def wpaths_to_file(root_folder, fname, wpath_list):
             wid = get_writer_id(wpath)
             word = get_actual_word(wpath)
             assert root_folder in wpath
-            relpath = wpath.replace(root_folder, "")
+            relpath = wpath.replace(root_folder + "/", "")
+            relpath = relpath.replace(root_folder, "")
             f.write(f"{relpath},{wid},{word}\n")
 
 
@@ -161,15 +171,29 @@ def main():
     args = parser.parse_args()
     #
     wpath_coll = get_wpath_coll(args.cvl_folder, args.only_ascii)
+    save_windexmap(
+        os.path.join(args.output_folder, "writers_dict_cvl.json"), wpath_coll
+    )
+    #
     train_list, test_list, val_list = get_splits(wpath_coll, args.train_split)
     train_val_list = train_list + val_list
     #
-    wpaths_to_file(args.cvl_folder, os.path.join(args.output_folder, "cvl_training.txt"), train_list)
-    wpaths_to_file(args.cvl_folder, os.path.join(args.output_folder, "cvl_val.txt"), val_list)
     wpaths_to_file(
-        args.cvl_folder, os.path.join(args.output_folder, "cvl_train_val.txt"), train_val_list
+        args.cvl_folder,
+        os.path.join(args.output_folder, "cvl_training.txt"),
+        train_list,
     )
-    wpaths_to_file(args.cvl_folder, os.path.join(args.output_folder, "cvl_test.txt"), test_list)
+    wpaths_to_file(
+        args.cvl_folder, os.path.join(args.output_folder, "cvl_val.txt"), val_list
+    )
+    wpaths_to_file(
+        args.cvl_folder,
+        os.path.join(args.output_folder, "cvl_train_val.txt"),
+        train_val_list,
+    )
+    wpaths_to_file(
+        args.cvl_folder, os.path.join(args.output_folder, "cvl_test.txt"), test_list
+    )
 
 
 if __name__ == "__main__":
