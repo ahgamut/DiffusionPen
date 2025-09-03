@@ -494,6 +494,8 @@ class WLStyleDataset(Dataset):
 
 
 class IAMStyleDataset(WLStyleDataset):
+    STYLE_CLASSES = 339
+
     def __init__(self, basefolder, subset, segmentation_level, fixed_size, transforms):
         super().__init__(basefolder, subset, segmentation_level, fixed_size, transforms)
         self.setname = "IAM"
@@ -632,6 +634,8 @@ class IAMStyleDataset(WLStyleDataset):
 
 
 class CVLStyleDataset(Dataset):
+    STYLE_CLASSES = 310
+
     def __init__(self, basefolder, subset, fixed_size, transforms):
         super().__init__()
         self.basefolder = basefolder
@@ -645,7 +649,7 @@ class CVLStyleDataset(Dataset):
         self.max_transcr_len = 0
         #
         self.setname = "CVL"
-        self.trainset_file = "utils/splits_words/cvl_training.txt"
+        self.trainset_file = "utils/splits_words/cvl_train_val.txt"
         self.valset_file = "utils/splits_words/cvl_val.txt"
         self.testset_file = "utils/splits_words/cvl_test.txt"
         self.finalize()
@@ -802,7 +806,7 @@ class CVLStyleDataset(Dataset):
         wmap = dict()
         for i, (img_path, transcr, writer_id) in enumerate(valid_set):
             img = Image.open(img_path + ".png").convert("RGB")  # .convert('L')
-            if img.height < 64 and img.width < 256:
+            if img.height < self.fixed_size[0] and img.width < self.fixed_size[1]:
                 img = img
             else:
                 img = image_resize_PIL(img, height=img.height // 2)

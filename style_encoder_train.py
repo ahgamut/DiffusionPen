@@ -22,7 +22,12 @@ import random
 
 #
 from utils.word_dataset import LineListIO
-from utils.style_dataset import WordStyleDataset, WLStyleDataset, IAMStyleDataset
+from utils.style_dataset import (
+    WordStyleDataset,
+    WLStyleDataset,
+    IAMStyleDataset,
+    CVLStyleDataset,
+)
 from utils.auxilary_functions import (
     affine_transformation,
     image_resize_PIL,
@@ -496,6 +501,50 @@ def build_IAMDataset(args):
     return train_data, val_data, train_loader, val_loader, style_classes
 
 
+def build_CVLDataset(args):
+    dataset_folder = args.data_path
+    train_transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ]
+    )
+
+    train_data = CVLStyleDataset(
+        dataset_folder,
+        "train",
+        "word",
+        fixed_size=(1 * 64, 256),
+        transforms=train_transform,
+    )
+
+    # split with torch.utils.data.Subset into train and val
+    validation_size = int(0.2 * len(train_data))
+
+    # Calculate the size of the training set
+    train_size = len(train_data) - validation_size
+
+    # Use random_split to split the dataset into train and validation sets
+    train_data, val_data = random_split(
+        train_data,
+        [train_size, validation_size],
+        generator=torch.Generator().manual_seed(42),
+    )
+    print("len train data", len(train_data))
+    print("len val data", len(val_data))
+
+    train_loader = DataLoader(
+        train_data, batch_size=args.batch_size, shuffle=True, num_workers=4
+    )
+
+    val_loader = DataLoader(
+        val_data, batch_size=args.batch_size, shuffle=False, num_workers=4
+    )
+
+    style_classes = CVLStyleDataset.STYLE_CLASSES
+    return train_data, val_data, train_loader, val_loader, style_classes
+
+
 ###
 
 
@@ -571,6 +620,10 @@ def main():
     if args.dataset == "iam":
         train_data, val_data, train_loader, val_loader, style_classes = (
             build_IAMDataset(args)
+        )
+    elif args.dataset == "cvl":
+        train_data, val_data, train_loader, val_loader, style_classes = (
+            build_CVLDataset(args)
         )
     else:
         raise RuntimeError(
