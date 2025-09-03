@@ -33,7 +33,7 @@ from utils.auxilary_functions import (
     image_resize_PIL,
     centered_PIL,
 )
-from models import ImageEncoder, AvgMeter
+from models import ImageEncoder, Mixed_Encoder, AvgMeter
 
 
 # ================ Performance and Loss Function ========================
@@ -634,7 +634,7 @@ def main():
 
     if args.model == "mobilenetv2_100":
         print("Using mobilenetv2_100")
-        model = ImageEncoder(
+        model = Mixed_Encoder(
             model_name="mobilenetv2_100",
             num_classes=style_classes,
             pretrained=True,
@@ -643,7 +643,7 @@ def main():
 
     elif args.model == "resnet18":
         print("Using resnet18")
-        model = ImageEncoder(
+        model = Mixed_Encoder(
             model_name=args.model,
             num_classes=style_classes,
             pretrained=True,
