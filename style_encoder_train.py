@@ -13,7 +13,6 @@ from skimage.transform import resize
 import os
 import argparse
 import torch.optim as optim
-from tqdm import tqdm
 import timm
 import cv2
 import time
@@ -54,7 +53,7 @@ def train_class_epoch(model, training_data, optimizer, args):
     total_loss = 0
     n_corrects = 0
     total = 0
-    pbar = tqdm(training_data)
+    pbar = training_data
     for i, data in enumerate(pbar):
 
         image = data[0].to(args.device)
@@ -91,7 +90,7 @@ def eval_class_epoch(model, validation_data, args):
     prediction_list = []
     results = []
     with torch.no_grad():
-        for i, data in enumerate(tqdm(validation_data)):
+        for i, data in enumerate(validation_data):
 
             image = data[0].to(args.device)
             image_paths = data[4]
@@ -123,7 +122,7 @@ def train_epoch_triplet(train_loader, model, criterion, optimizer, device, args)
     running_loss = 0
     total = 0
     loss_meter = AvgMeter()
-    pbar = tqdm(train_loader)
+    pbar = train_loader
     for i, data in enumerate(pbar):
 
         img = data[0]
@@ -162,7 +161,7 @@ def train_epoch_triplet(train_loader, model, criterion, optimizer, device, args)
 def val_epoch_triplet(val_loader, model, criterion, optimizer, device, args):
     running_loss = 0
     total = 0
-    pbar = tqdm(val_loader)
+    pbar = val_loader
     for i, data in enumerate(pbar):
 
         img = data[0]
@@ -209,7 +208,7 @@ def train_epoch_mixed(
     loss_meter = AvgMeter()
     loss_meter_triplet = AvgMeter()
     loss_meter_class = AvgMeter()
-    pbar = tqdm(train_loader)
+    pbar = train_loader
     for i, data in enumerate(pbar):
         img = data[0]
         wid = data[2].to(device)
@@ -271,7 +270,7 @@ def val_epoch_mixed(
     total = 0
     n_corrects = 0
     loss_meter = AvgMeter()
-    pbar = tqdm(val_loader)
+    pbar = val_loader
     for i, data in enumerate(pbar):
 
         img = data[0].to(device)
