@@ -107,19 +107,18 @@ class CVLBaseDataset(Dataset):
         else:
             wid = ind
 
-        positive_samples = self.wmap[wid]
+        positives = self.wmap[wid]
         imgs = []
         paths = []
-        while len(result) < 5:
-            mas = random.sample(positive_samples, 5)
+        while len(result) < num_samples:
+            mas = random.sample(positives, num_samples)
             for ma_ind in mas:
                 ma = self.data[ma_ind]
-                ma_img = None
                 if len(ma[2]) > 3 or not strict:
                     imgs.append(ma[0])
                     paths.append(self.img_paths[ma_ind])
 
-        result = {"imgs": imgs, "paths": paths}
+        result = {"imgs": imgs[:num_samples], "paths": paths[:num_samples]}
         return result
 
     @staticmethod
