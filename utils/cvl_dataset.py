@@ -190,19 +190,20 @@ class CVLDataset(Dataset):
                 # resize image to height 64 keeping aspect ratio
                 img = img.resize((int(img_width * 64 / img_height), 64))
                 (img_width, img_height) = img.size
+                
+                while img_width > 256:
+                    img = image_resize_PIL(img, width=img_width - 20)
+                    (img_width, img_height) = img.size
 
                 if img_width < 256:
                     outImg = ImageOps.pad(
                         img, size=(256, 64), 
                         centering=(0.5, 0.5),
-                        color="white",
+                        color=255,
                     )
                     img = outImg
-                else:
-                    while img_width > 256:
-                        img = image_resize_PIL(img, width=img_width - 20)
-                        (img_width, img_height) = img.size
-                    img = centered_PIL(img, (64, 256), border_value=255.0)
+                
+                img = centered_PIL(img, (64, 256), border_value=255.0)
 
             obj = (img, transcr, writer_id)
             if writer_id in wmap.keys():

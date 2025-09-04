@@ -3,6 +3,7 @@ import glob
 import os
 import random
 import json
+import gc
 
 
 def dir_exists(x):
@@ -133,13 +134,14 @@ def build_backups(cvl_folder):
     from utils.cvl_dataset import CVLDataset
 
     tform = lambda x: x
-    for subset in ["train", "val", "test"]:
+    for subset in ["test", "val", "train"]:
         sd = CVLStyleDataset(
             basefolder=cvl_folder,
             subset=subset,
             fixed_size=(1 * 64, 256),
             transforms=tform,
         )
+        del sd
         wd = CVLDataset(
             cvl_folder,
             subset,
@@ -151,6 +153,8 @@ def build_backups(cvl_folder):
             transforms=tform,
             args=None,
         )
+        del wd
+        gc.collect()
 
 def main():
     parser = argparse.ArgumentParser(
