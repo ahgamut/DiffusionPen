@@ -130,7 +130,7 @@ def wpaths_to_file(root_folder, fname, wpath_list):
             f.write(f"{relpath},{wid},{word}\n")
 
 def build_backups(cvl_folder):
-    from utils.style_dataset import CVLStyleDataset
+    from utils.cvl_dataset import CVLStyleDataset
     from utils.cvl_dataset import CVLDataset
 
     tform = lambda x: x

@@ -25,8 +25,8 @@ from utils.style_dataset import (
     WordStyleDataset,
     WLStyleDataset,
     IAMStyleDataset,
-    CVLStyleDataset,
 )
+from utils.cvl_dataset import CVLStyleDataset
 from utils.auxilary_functions import (
     affine_transformation,
     image_resize_PIL,
