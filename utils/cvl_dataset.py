@@ -77,7 +77,7 @@ class CVLDataset(Dataset):
             save_path, self.subset, self.segmentation_level, self.setname
         )
         if isfile(save_file):
-            raw = torch.load(save_file, weights_only=True)
+            raw = torch.load(save_file, weights_only=False) # unsafe, but just ndarrays
             print("loaded save file", save_file)
         else:
             raw = self.main_loader(self.subset, self.segmentation_level)
@@ -256,7 +256,7 @@ class CVLStyleDataset(Dataset):
             save_path, self.subset, self.segmentation_level, self.setname
         )
         if isfile(save_file):
-            raw = torch.load(save_file, weights_only=True)
+            raw = torch.load(save_file, weights_only=False) # unsafe but just ndarrays
             print("loaded save file", save_file)
         else:
             raw = self.main_loader(self.subset, self.segmentation_level)
