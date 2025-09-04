@@ -75,7 +75,10 @@ class IAM_TempLoader:
 
         if cls.wmap is None:
             wmap = dict()
-            for img_path, wid, transcr in cls.train_data:
+            for obj in cls.train_data:
+                img_path = obj[0]
+                wid = obj[1]
+                transcr = ",".join(obj[2:])
                 if wid in wmap.keys():
                     wmap[wid].append((img_path, wid, transcr))
                 else:
@@ -86,14 +89,14 @@ class IAM_TempLoader:
             cls.tform = transforms.ToTensor()
 
     @classmethod
-    def get_five_styles(cls, label_index):
+    def get_styles(cls, label_index, n_samples):
         wid = cls.reverse_wr_dict[label_index]
         matching_lines = cls.wmap[wid]
 
         paths = []
         imgs = []
         while len(imgs) < 5:
-            mas = random.sample(matching_lines, 5)
+            mas = random.sample(matching_lines, n_samples)
             for ma in mas:
                 ma_path = None
                 ma_img = None
@@ -109,29 +112,29 @@ class IAM_TempLoader:
                     imgs.append(ma_img)
                     paths.append(ma[0])
 
-        result = {"paths": paths, "imgs": imgs}
+        result = {"paths": paths[:5], "imgs": imgs[:5]}
         return result
 
     @classmethod
-    def load(cls, label, vae, interpol=False, cor_im=False):
+    def load(cls, label, vae, args, interpol=False, cor_im=False):
         result = dict()
         # print('label', label)
         cls.check_preload()
         # pick random image according to specific style
         style_featur = []
         label_index = label.item()
-        cor_image_random = random.sample(matching_lines, 1)[0]
 
         if interpol:
             label2 = random.randint(0, 339)  # random label
-            five_styles = cls.get_five_styles(label2)
+            five_styles = cls.get_styles(label2, 5)
         else:
-            five_styles = cls.get_five_styles(label_index)
+            five_styles = cls.get_styles(label_index, 5)
 
         print("five_styles", five_styles["paths"])
         # cor_image
         fheight, fwidth = 64, 256
         if cor_im == True:
+            cor_image_random = cls.get_styles(label_index, 1)["imgs"]
             cor_image = Image.open(
                 os.path.join(cls.root_path, cor_image_random[0])
             ).convert("RGB")
@@ -153,7 +156,7 @@ class IAM_TempLoader:
             # img_s = img_s.convert('L')
             grid_im = cls.tform(img_s)
             grid_imgs += [grid_im]
-            img_tens = transform(img_s).to(args.device)  # .unsqueeze(0)
+            img_tens = cls.tform(img_s).to(args.device)  # .unsqueeze(0)
             st_imgs += [img_tens]
 
         grid_imgs = torch.stack(grid_imgs).to(args.device)
@@ -230,9 +233,10 @@ class Diffusion:
             if args.img_feat == True:
                 cor_im = False
                 for label in labels:
-                    stuff = temp_loader.load(label)
+                    stuff = temp_loader.load(label, vae, args, interpol=False, cor_im=False)
                     style_images = stuff["style_images"].reshape(-1, 3, 64, 256)
                     style_features = style_extractor(style_images).to(args.device)
+                    print(style_images.shape, style_features.shape)
             else:
                 style_images = None
                 style_features = None
