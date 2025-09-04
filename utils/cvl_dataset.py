@@ -12,7 +12,7 @@ import os
 import random
 import string
 import torch
-import tqdm
+from tqdm import tqdm
 
 #
 from utils.word_dataset import WordLineDataset
@@ -22,7 +22,7 @@ from utils.auxilary_functions import (
     get_default_character_classes,
 )
 
-class CVLSDataset(Dataset):
+class CVLDataset(Dataset):
     STYLE_CLASSES = 310
 
     def __init__(
@@ -36,6 +36,7 @@ class CVLSDataset(Dataset):
         feat_extractor,
         transforms,
         character_classes=None,
+        args=None,
     ):
         super().__init__()
         self.basefolder = basefolder
@@ -53,6 +54,7 @@ class CVLSDataset(Dataset):
         self.tokenizer = tokenizer
         self.text_encoder = text_encoder
         self.feat_extractor = feat_extractor
+        self.args = args
         #
         self.setname = "CVL"
         self.trainset_file = "utils/splits_words/cvl_train_val.txt"
@@ -69,7 +71,7 @@ class CVLSDataset(Dataset):
             self.stopwords = self.stopwords[0]
 
         save_path = "./saved_iam_data"
-        save_file = "{}/{}_{}_{}.pt".format(
+        save_file = "{}/sfix_{}_{}_{}.pt".format(
             save_path, self.subset, self.segmentation_level, self.setname
         )
         if isfile(save_file):
@@ -113,14 +115,14 @@ class CVLSDataset(Dataset):
         img_path = self.img_paths[index]
 
         # pick another sample that has the same writer id
-        positive_samples = random.sample(self.wmap[wid], k=5)
-        style_images = [x[0] for x in positive_samples]
+        positive_indices = random.sample(self.wmap[wid], k=5)
+        style_images = [self.data[x][0] for x in positive_indices]
         # ??
-        cor_images = random.sample(self.wmap[wid], k=1)
+        cor_index = random.sample(self.wmap[wid], k=1)[0]
 
         # transform
         img = self.transforms(img)
-        cor_image = self.transforms(cor_images[0][0])
+        cor_image = self.transforms(self.data[cor_index][0])
         s_imgs = torch.stack([self.transforms(x) for x in style_images])
 
         widi = self.windex_forward[wid]  # 0-309
@@ -165,11 +167,11 @@ class CVLSDataset(Dataset):
 
     def main_loader(self, subset, segmentation_level) -> list:
         if subset == "train":
-            valid_set = CVLStyleDataset.load_splits_text(self.trainset_file)
+            valid_set = CVLDataset.load_splits_text(self.trainset_file)
         elif subset == "val":
-            valid_set = CVLStyleDataset.load_splits_text(self.valset_file)
+            valid_set = CVLDataset.load_splits_text(self.valset_file)
         elif subset == "test":
-            valid_set = CVLStyleDataset.load_splits_text(self.testset_file)
+            valid_set = CVLDataset.load_splits_text(self.testset_file)
         else:
             raise ValueError("can't pick subset")
 
@@ -177,14 +179,31 @@ class CVLSDataset(Dataset):
         paths = []
         wmap = dict()
         for i, (rel_path, transcr, writer_id) in enumerate(valid_set):
+            print(i)
             img_path = os.path.join(self.basefolder, rel_path)
             img = Image.open(img_path).convert("RGB")  # .convert('L')
-            if img.height < self.fixed_size[0] and img.width < self.fixed_size[1]:
-                img = img
+            transcr = CVLDataset.fix_transcriptions(transcr)
+            if transcr in string.punctuation:
+                img = centered_PIL(img, (64, 256), border_value=255.0)
             else:
-                img = image_resize_PIL(img, height=img.height // 2)
+                (img_width, img_height) = img.size
+                # resize image to height 64 keeping aspect ratio
+                img = img.resize((int(img_width * 64 / img_height), 64))
+                (img_width, img_height) = img.size
 
-            transcr = CVLStyleDataset.fix_transcriptions(transcr)
+                if img_width < 256:
+                    outImg = ImageOps.pad(
+                        img, size=(256, 64), 
+                        centering=(0.5, 0.5),
+                        color="white",
+                    )
+                    img = outImg
+                else:
+                    while img_width > 256:
+                        img = image_resize_PIL(img, width=img_width - 20)
+                        (img_width, img_height) = img.size
+                    img = centered_PIL(img, (64, 256), border_value=255.0)
+
             obj = (img, transcr, writer_id)
             if writer_id in wmap.keys():
                 wmap[writer_id].append(i)
