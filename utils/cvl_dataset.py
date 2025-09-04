@@ -56,6 +56,7 @@ class CVLBaseDataset(Dataset):
         self.trainset_file = "utils/splits_words/cvl_train_val.txt"
         self.valset_file = "utils/splits_words/cvl_val.txt"
         self.testset_file = "utils/splits_words/cvl_test.txt"
+        self.fullset_file = "utils/splits_words/cvl_full.txt"
         self.windexmap_file = "utils/splits_words/writers_dict_cvl.json"
         self.finalize()
 
@@ -149,11 +150,13 @@ class CVLBaseDataset(Dataset):
 
     def main_loader(self, subset, segmentation_level):
         if subset == "train":
-            valid_set = CVLDataset.load_splits_text(self.trainset_file)
+            valid_set = CVLBaseDataset.load_splits_text(self.trainset_file)
         elif subset == "val":
-            valid_set = CVLDataset.load_splits_text(self.valset_file)
+            valid_set = CVLBaseDataset.load_splits_text(self.valset_file)
         elif subset == "test":
-            valid_set = CVLDataset.load_splits_text(self.testset_file)
+            valid_set = CVLBaseDataset.load_splits_text(self.testset_file)
+        elif subset == "full":
+            valid_set = CVLBaseDataset.load_splits_text(self.fullset_file)
         else:
             raise ValueError("can't pick subset")
 
@@ -164,7 +167,7 @@ class CVLBaseDataset(Dataset):
             print(i)
             img_path = os.path.join(self.basefolder, rel_path)
             img = Image.open(img_path).convert("RGB")  # .convert('L')
-            transcr = CVLDataset.fix_transcriptions(transcr)
+            transcr = CVLBaseDataset.fix_transcriptions(transcr)
             if transcr in string.punctuation:
                 img = centered_PIL(img, (64, 256), border_value=255.0)
             else:
