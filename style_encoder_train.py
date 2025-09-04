@@ -71,7 +71,7 @@ def train_class_epoch(model, training_data, optimizer, args):
         total_loss += loss.item()
         total += label.size(0)
         n_corrects += (preds == label).sum().item()
-        pbar.set_postfix(Loss=loss.item())
+        # pbar.set_postfix(Loss=loss.item())
 
     loss = total_loss / total
     accuracy = n_corrects / total
@@ -150,7 +150,7 @@ def train_epoch_triplet(train_loader, model, criterion, optimizer, device, args)
         # pbar.set_postfix(triplet_loss=loss.item())
         count = img.size(0)
         loss_meter.update(loss.item(), count)
-        pbar.set_postfix(triplet_loss=loss_meter.avg)
+        # pbar.set_postfix(triplet_loss=loss_meter.avg)
         total += img.size(0)
 
     print("total", total)
@@ -182,7 +182,7 @@ def val_epoch_triplet(val_loader, model, criterion, optimizer, device, args):
 
         # running_loss.append(loss.cpu().detach().numpy())
         running_loss += loss.item()
-        pbar.set_postfix(triplet_loss=loss.item())
+        # pbar.set_postfix(triplet_loss=loss.item())
         total += wid.size(0)
 
     print("total", total)
@@ -242,11 +242,11 @@ def train_epoch_mixed(
         loss_meter.update(loss.item(), count)
         loss_meter_triplet.update(triplet_loss.item(), count)
         loss_meter_class.update(classification_loss.item(), count)
-        pbar.set_postfix(
-            mixed_loss=loss_meter.avg,
-            classification_loss=loss_meter_class.avg,
-            triplet_loss=loss_meter_triplet.avg,
-        )
+        # pbar.set_postfix(
+        #    mixed_loss=loss_meter.avg,
+        #    classification_loss=loss_meter_class.avg,
+        #    triplet_loss=loss_meter_triplet.avg,
+        # )
         total += img.size(0)
 
     accuracy = n_corrects / total
@@ -297,7 +297,7 @@ def val_epoch_mixed(
         running_loss += loss.item()
         count = img.size(0)
         loss_meter.update(loss.item(), count)
-        pbar.set_postfix(mixed_loss=loss_meter.avg)
+        # pbar.set_postfix(mixed_loss=loss_meter.avg)
         total += wid.size(0)
 
     print("total", total)
