@@ -131,7 +131,6 @@ def wpaths_to_file(root_folder, fname, wpath_list):
 
 def build_backups(cvl_folder):
     from utils.cvl_dataset import CVLStyleDataset
-    from utils.cvl_dataset import CVLDataset
 
     tform = lambda x: x
     for subset in ["test", "val", "train"]:
@@ -142,18 +141,6 @@ def build_backups(cvl_folder):
             transforms=tform,
         )
         del sd
-        wd = CVLDataset(
-            cvl_folder,
-            subset,
-            "word",
-            fixed_size=(1 * 64, 256),
-            tokenizer=None,
-            text_encoder=None,
-            feat_extractor=None,
-            transforms=tform,
-            args=None,
-        )
-        del wd
         gc.collect()
 
 def main():

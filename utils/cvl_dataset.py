@@ -73,7 +73,7 @@ class CVLDataset(Dataset):
             self.stopwords = self.stopwords[0]
 
         save_path = "./saved_iam_data"
-        save_file = "{}/actual_{}_{}_{}.pt".format(
+        save_file = "{}/{}_{}_{}.pt".format(
             save_path, self.subset, self.segmentation_level, self.setname
         )
         if isfile(save_file):
@@ -175,7 +175,6 @@ class CVLDataset(Dataset):
         else:
             raise ValueError("can't pick subset")
 
-        base_tform = transforms.ToTensor()
         data = []
         paths = []
         wmap = dict()
@@ -207,9 +206,8 @@ class CVLDataset(Dataset):
 
                 img = centered_PIL(img, (64, 256), border_value=255.0)
 
-            # convert to tensor before storing
-            img = np.array(img, dtype=np.float32)
-            img = base_tform(img)
+            # convert to ndarray before storing
+            img = np.array(img)
 
             obj = (img, transcr, writer_id)
             if writer_id in wmap.keys():
@@ -254,7 +252,7 @@ class CVLStyleDataset(Dataset):
             self.stopwords = self.stopwords[0]
 
         save_path = "./saved_iam_data"
-        save_file = "{}/style_{}_{}_{}.pt".format(
+        save_file = "{}/{}_{}_{}.pt".format(
             save_path, self.subset, self.segmentation_level, self.setname
         )
         if isfile(save_file):
@@ -364,7 +362,6 @@ class CVLStyleDataset(Dataset):
         else:
             raise ValueError("can't pick subset")
 
-        base_tform = transforms.ToTensor()
         data = []
         paths = []
         wmap = dict()
@@ -395,9 +392,8 @@ class CVLStyleDataset(Dataset):
 
                 img = centered_PIL(img, (64, 256), border_value=255.0)
 
-            # convert to tensor before storing
-            img = np.array(img, dtype=np.float32)
-            img = base_tform(img)
+            # convert to ndarray before storing
+            img = np.array(img)
 
             obj = (img, transcr, writer_id)
             if writer_id in wmap.keys():
