@@ -127,7 +127,7 @@ class CVLDataset(Dataset):
 
         widi = self.windex_forward[wid]  # 0-309
         # why return image path?
-        return img, transcr, widi, s_imgs, img_path, cor_im
+        return img, transcr, widi, s_imgs, img_path, cor_image
 
     def collate_fn(self, batch):
         img, transcr, wid, s_imgs, img_path, cor_im = zip(*batch)
