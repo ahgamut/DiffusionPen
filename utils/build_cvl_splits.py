@@ -128,6 +128,29 @@ def wpaths_to_file(root_folder, fname, wpath_list):
             relpath = relpath.replace(root_folder, "")
             f.write(f"{relpath},{wid},{word}\n")
 
+def build_backups(cvl_folder):
+    from utils.style_dataset import CVLStyleDataset
+    from utils.cvl_dataset import CVLDataset
+
+    tform = lambda x: x
+    for subset in ["train", "val", "test"]:
+        sd = CVLStyleDataset(
+            basefolder=cvl_folder,
+            subset=subset,
+            fixed_size=(1 * 64, 256),
+            transforms=tform,
+        )
+        wd = CVLDataset(
+            cvl_folder,
+            subset,
+            "word",
+            fixed_size=(1 * 64, 256),
+            tokenizer=None,
+            text_encoder=None,
+            feat_extractor=None,
+            transforms=tform,
+            args=None,
+        )
 
 def main():
     parser = argparse.ArgumentParser(
@@ -167,7 +190,8 @@ def main():
         action="store_false",
         help="allow all chars",
     )
-    parser.set_defaults(only_ascii=True)
+    parser.add_argument("--build-backups", dest="backups", action="store_true", help="build torch backups")
+    parser.set_defaults(only_ascii=True, backups=False)
     args = parser.parse_args()
     #
     wpath_coll = get_wpath_coll(args.cvl_folder, args.only_ascii)
@@ -194,6 +218,9 @@ def main():
     wpaths_to_file(
         args.cvl_folder, os.path.join(args.output_folder, "cvl_test.txt"), test_list
     )
+    #
+    if args.backups:
+        build_backups(args.cvl_folder)
 
 
 if __name__ == "__main__":
