@@ -84,9 +84,9 @@ def main():
         default="diffusionpen",
         help="(deprecated)",
     )
+    parser.add_argument("--setname", default="iam", help="iam, cvl")
     parser.add_argument("-w", "--writer-id", type=int, default=12)
-    parser.add_argument("--level", type=str, default="word", help="word, line")
-    parser.add_argument("--img_size", type=int, default=(64, 256))
+    parser.add_argument("--img-size", type=int, default=(64, 256))
     # UNET parameters
     parser.add_argument("--channels", type=int, default=4)
     parser.add_argument("--emb_dim", type=int, default=320)

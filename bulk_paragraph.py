@@ -304,6 +304,7 @@ def main():
         default="diffusionpen",
         help="(deprecated)",
     )
+    parser.add_argument("--setname", default="iam", help="iam, cvl")
     parser.add_argument("-w", "--writer-range", type=range_check, default=(1, 1))
     parser.add_argument("--level", type=str, default="word", help="word, line")
     parser.add_argument("--img-size", type=int, default=(64, 256))
