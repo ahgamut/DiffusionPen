@@ -175,7 +175,7 @@ class CVLDataset(Dataset):
         else:
             raise ValueError("can't pick subset")
 
-        base_tform = transforms.toTensor()
+        base_tform = transforms.ToTensor()
         data = []
         paths = []
         wmap = dict()
@@ -364,6 +364,7 @@ class CVLStyleDataset(Dataset):
         else:
             raise ValueError("can't pick subset")
 
+        base_tform = transforms.ToTensor()
         data = []
         paths = []
         wmap = dict()
