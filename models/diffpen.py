@@ -495,6 +495,7 @@ class Diffusion:
         model.eval()
         tensor_list = []
         assert len(labels) == 2
+        n = 1
 
         with torch.no_grad():
             text_features = x_text  # [x_text]*n
@@ -520,10 +521,11 @@ class Diffusion:
             for time in noise_scheduler.timesteps:
                 t_item = time.item()
                 t = (torch.ones(n) * t_item).long().to(args.device)
-                noisy_residual = model.forward_interp(
+                noisy_residual = model(
                     x=x,
                     s1=labels[0].item(),
                     s2=labels[1].item(),
+                    interpolation=True,
                     mix_rate=args.interp_weight,
                     timesteps=t,
                     context=text_features,

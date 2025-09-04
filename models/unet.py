@@ -1372,6 +1372,17 @@ class UNetModel(nn.Module):
         :return: an [N x C x ...] Tensor of outputs.
         """
         # print('y', y.shape)
+        if kwargs.get("interpolation", False):
+            return self.forward_interp(
+                x=x,
+                s1=kwargs.get("s1", 1),
+                s2=kwargs.get("s2", 2),
+                timesteps=timesteps,
+                context=context,
+                y=y,
+                mix_rate=mix_rate,
+                style_extractor=style_extractor,
+            )
 
         # assert (y is not None) == (
         #     self.num_classes is not None
