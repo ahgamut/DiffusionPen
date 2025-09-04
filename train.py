@@ -20,6 +20,7 @@ from torchvision import transforms
 
 #
 from models import UNetModel, ImageEncoder, EMA, Diffusion, AvgMeter
+from utils.cvl_dataset import CVLDataset
 from utils.iam_dataset import IAMDataset
 from utils.GNHK_dataset import GNHK_Dataset
 from utils.auxilary_functions import *
@@ -193,6 +194,34 @@ def build_GNHKDataset(args, transform):
     rest = len(train_data) - test_size
     test_data, _ = random_split(
         train_data, [test_size, rest], generator=torch.Generator().manual_seed(42)
+    )
+    return train_data, test_data, style_classes
+
+
+def build_CVLDataset(args, transform):
+    cvl_folder = "./cvl_data"
+    style_classes = CVLDataset.STYLE_CLASSES
+    train_data = CVLDataset(
+        cvl_folder,
+        "train",
+        "word",
+        fixed_size=(1 * 64, 256),
+        tokenizer=None,
+        text_encoder=None,
+        feat_extractor=None,
+        transforms=transform,
+        args=args,
+    )
+    test_data = CVLDataset(
+        cvl_folder,
+        "test",
+        "word",
+        fixed_size=(1 * 64, 256),
+        tokenizer=None,
+        text_encoder=None,
+        feat_extractor=None,
+        transforms=transform,
+        args=args,
     )
     return train_data, test_data, style_classes
 
@@ -385,7 +414,7 @@ def main():
     )
     parser.add_argument("--level", type=str, default="word", help="word, line")
     parser.add_argument("--img-size", type=int, default=(64, 256))
-    parser.add_argument("--dataset", type=str, default="iam", help="iam, gnhk")
+    parser.add_argument("--dataset", type=str, default="iam", help="iam, gnhk, cvl")
     # UNET parameters
     parser.add_argument("--channels", type=int, default=4)
     parser.add_argument("--emb-dim", type=int, default=320)
@@ -435,6 +464,10 @@ def main():
     elif args.dataset == "gnhk":
         print("loading GNHK")
         train_data, test_data, style_classes = build_GNHKDataset(args, transform)
+
+    elif args.dataset == "cvl":
+        print("loading CVL")
+        train_data, test_data, style_classes = build_CVLDataset(args, transform)
 
     else:
         raise ValueError("unknown dataset!")

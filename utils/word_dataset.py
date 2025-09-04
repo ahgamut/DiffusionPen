@@ -134,10 +134,6 @@ print("num_tokens", num_tokens)
 
 
 class WordLineDataset(Dataset):
-    #
-    # TODO list:
-    #
-    #   Create method that will print data statistics (min/max pixel value, num of channels, etc.)
     """
     This class is a generic Dataset class meant to be used for word- and line- image datasets.
     It should not be used directly, but inherited by a dataset-specific class.
@@ -196,9 +192,7 @@ class WordLineDataset(Dataset):
         else:
             data = torch.load(save_file, weights_only=True)
 
-        # data = self.main_loader(self.subset, self.segmentation_level)
         self.data = data
-        # print('data', self.data)
         self.initial_writer_ids = [d[2] for d in data]
 
         writer_ids, _ = np.unique([d[2] for d in data], return_inverse=True)
