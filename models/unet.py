@@ -1458,3 +1458,76 @@ class UNetModel(nn.Module):
         else:
 
             return self.out(h)
+
+    def forward_interp(
+        self,
+        x,
+        s1,
+        s2,
+        mix_rate,
+        timesteps=None,
+        context=None,
+        style_extractor=None,
+        **kwargs,
+    ):
+        """
+        Apply the model to an input batch.
+        :param x: an [N x C x ...] Tensor of inputs.
+        :param timesteps: a 1-D batch of timesteps.
+        :param context: conditioning plugged in via crossattn
+        :param y: an [N] Tensor of labels, if class-conditional.
+        :return: an [N x C x ...] Tensor of outputs.
+        """
+        # print('y', y.shape)
+
+        # assert (y is not None) == (
+        #     self.num_classes is not None
+        # ), "must specify y if and only if the model is class-conditional"
+        hs = []
+
+        t_emb = timestep_embedding(
+            timesteps, self.model_channels, repeat_only=False
+        )  # .to(x.device)
+        emb = self.time_embed(t_emb)
+
+        # if self.num_classes is not None:
+        #   assert y.shape == (x.shape[0],)
+        if style_extractor is not None:
+            s_id = style_extractor
+            y = s_id.to(x.device)
+
+        y1 = torch.tensor([s1]).long().to(x.device)
+        y2 = torch.tensor([s2]).long().to(x.device)
+        y1 = self.label_emb(y1).to(x.device)
+        y2 = self.label_emb(y2).to(x.device)
+        y = (1 - mix_rate) * y1 + mix_rate * y2
+        y = y.to(x.device)
+        emb = emb + y
+
+        if context is not None:
+            context = self.text_encoder(**context).last_hidden_state  # .to(x.device)
+            if self.cont_dim == 320:
+                context = self.text_lin(context)  # .unsqueeze(1)
+
+        h = x.type(self.dtype)
+        context = context.to(h.device)
+
+        # INPUT BLOCKS
+        for module in self.input_blocks:
+            h = module(h, emb, context)
+            hs.append(h)
+
+        # MIDDLE BLOCK
+        h = self.middle_block(h, emb, context)
+
+        # OUTPUT BLOCKS
+        for module in self.output_blocks:
+            h = torch.cat([h, hs.pop()], dim=1)
+            h = module(h, emb, context)
+
+        h = h.type(x.dtype)
+
+        if self.predict_codebook_ids:
+            return self.id_predictor(h)
+        else:
+            return self.out(h)

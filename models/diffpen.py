@@ -17,8 +17,15 @@ from torchvision import transforms
 from torchvision.utils import save_image
 from torch.nn import DataParallel
 from transformers import CanineModel, CanineTokenizer
+
 #
-from .auxiliary_functions import affine_transformation, image_resize, image_resize_PIL, centered, centered_PIL
+from .auxiliary_functions import (
+    affine_transformation,
+    image_resize,
+    image_resize_PIL,
+    centered,
+    centered_PIL,
+)
 from .feature_extractor import ImageEncoder
 
 
@@ -438,9 +445,9 @@ class Diffusion:
                 with torch.no_grad():
                     noisy_residual = model(
                         x,
-                        t,
-                        text_features,
-                        labels,
+                        timesteps=t,
+                        context=text_features,
+                        y=labels,
                         original_images=style_images,
                         mix_rate=mix_rate,
                         style_extractor=style_features,
@@ -490,7 +497,6 @@ class Diffusion:
         assert len(labels) == 2
 
         with torch.no_grad():
-            style_images = None
             text_features = x_text  # [x_text]*n
             # print('text features', text_features.shape)
             text_features = tokenizer(
@@ -500,221 +506,34 @@ class Diffusion:
                 return_tensors="pt",
                 max_length=40,
             ).to(args.device)
-            style_coll = []
-            if args.img_feat == True:
-                # pick random image according to specific style
-                with open("utils/writers_dict_train.json", "r") as f:
-
-                    wr_dict = json.load(f)
-                reverse_wr_dict = {v: k for k, v in wr_dict.items()}
-
-                # key = reverse_wr_dict[value]
-                with open("./utils/splits_words/iam_train_val.txt", "r") as f:
-                    # with open('./utils/splits_words/iam_test.txt', 'r') as f:
-                    train_data = f.readlines()
-                    train_data = [i.strip().split(",") for i in train_data]
-                    style_featur = []
-                    for label in labels:
-                        style_images = None
-                        # print('label', label)
-                        label_index = label.item()
-
-                        matching_lines = [
-                            line
-                            for line in train_data
-                            if line[1] == reverse_wr_dict[label_index]
-                            and len(line[2]) > 3
-                        ]
-
-                        # pick the first 5 from matching lines
-
-                        if len(matching_lines) >= 5:
-                            # five_styles = matching_lines[:5]
-                            # pick first line and repeat
-                            # five_styles = [matching_lines[0]]*5
-                            five_styles = random.sample(matching_lines, 5)
-                            # five_styles = matching_lines_style[:5]
-                        else:
-                            matching_lines = [
-                                line
-                                for line in train_data
-                                if line[1] == reverse_wr_dict[label_index]
-                            ]
-                            # print('matching lines', matching_lines)
-                            five_styles = matching_lines_style[:5]
-                            five_styles = [matching_lines[0]] * 5
-                            # five_styles = random.sample(matching_lines, 5)
-                        print("five_styles", five_styles)
-                        # five_styles = random.sample(matching_lines, 5)
-
-                        cor_image_random = random.sample(matching_lines, 1)
-
-                        interpol = False
-                        if interpol == True:
-                            label2 = random.randint(0, 339)  # random label
-                            matching_lines2 = [
-                                line
-                                for line in train_data
-                                if line[1] == reverse_wr_dict[label2]
-                                and len(line[2]) > 3
-                            ]
-                            five_styles = random.sample(matching_lines2, 5)
-                        # print('five_styles', five_styles)
-                        # cor_image
-                        fheight, fwidth = 64, 256
-                        root_path = "./iam_data/words"
-                        cor_im = False
-                        if cor_im == True:
-                            cor_image = Image.open(
-                                os.path.join(root_path, cor_image_random[0][0])
-                            ).convert(
-                                "RGB"
-                            )  # ['a05/a05-089/a05-089-00-05.png', '000', 'debate']
-                            (cor_image_width, cor_image_height) = cor_image.size
-                            cor_image = cor_image.resize(
-                                (int(cor_image_width * 64 / cor_image_height), 64)
-                            )
-                            (cor_image_width, cor_image_height) = cor_image.size
-
-                            if cor_image_width < 256:
-                                outImg = ImageOps.pad(
-                                    cor_image, size=(256, 64), color="white"
-                                )  # , centering=(0,0)) uncommment to pad right
-                                cor_image = outImg
-
-                            else:
-                                # reduce image until width is smaller than 256
-                                while cor_image_width > 256:
-                                    cor_image = image_resize_PIL(
-                                        cor_image, width=cor_image_width - 20
-                                    )
-                                    (cor_image_width, cor_image_height) = cor_image.size
-                                cor_image = centered_PIL(
-                                    cor_image, (64, 256), border_value=255.0
-                                )
-
-                            cor_im_tens = transform(cor_image).to(args.device)
-                            # print('cor image', cor_im_tens.shape)
-                            cor_im_tens = cor_im_tens.unsqueeze(0)
-                            cor_images = vae.module.encode(
-                                cor_im_tens.to(torch.float32)
-                            ).latent_dist.sample()
-                            cor_images = cor_images * 0.18215
-
-                        st_imgs = []
-                        grid_imgs = []
-                        for im_idx, random_f in enumerate(five_styles):
-                            file_path = os.path.join(root_path, random_f[0])
-                            # print('file_path', file_path)
-
-                            try:
-                                img_s = Image.open(file_path).convert("RGB")
-                            except ValueError:
-                                # Handle the exception (e.g., print an error message)
-                                print(f"Error loading image from {file_path}")
-
-                                # Find a replacement image that is not corrupted
-                                replacement_idx = (im_idx + 1) % 5
-                                replacement_f = five_styles[replacement_idx]
-                                name = replacement_f[0]  # .split(',')[1]
-                                replacement_file_path = os.path.join(root_path, name)
-                                img_s = Image.open(replacement_file_path).convert("RGB")
-
-                            (img_width, img_height) = img_s.size
-                            img_s = img_s.resize((int(img_width * 64 / img_height), 64))
-                            (img_width, img_height) = img_s.size
-
-                            if img_width < 256:
-                                outImg = ImageOps.pad(
-                                    img_s, size=(256, 64), color="white"
-                                )  # , centering=(0,0)) uncommment to pad right
-                                img_s = outImg
-
-                            else:
-                                # reduce image until width is smaller than 256
-                                while img_width > 256:
-                                    img_s = image_resize_PIL(
-                                        img_s, width=img_width - 20
-                                    )
-                                    (img_width, img_height) = img_s.size
-                                img_s = centered_PIL(
-                                    img_s, (64, 256), border_value=255.0
-                                )
-                            # make grid of all 5 images
-                            # img_s = img_s.convert('L')
-                            transform_tensor = transforms.ToTensor()
-                            grid_im = transform_tensor(img_s)
-                            grid_imgs += [grid_im]
-
-                            img_tens = transform(img_s).to(args.device)  # .unsqueeze(0)
-                            st_imgs += [img_tens]
-                            # style_features = style_extractor(style_images).to(args.device)
-                            # img_tensor = img_tensor.to(args.device)
-                        s_imgs = torch.stack(st_imgs).to(args.device)
-                        style_images = (
-                            torch.cat((style_images, s_imgs))
-                            if style_images is not None
-                            else s_imgs
-                        )
-
-                        grid_imgs = torch.stack(grid_imgs).to(args.device)
-
-                        style_images = style_images.to(args.device)
-
-                    # save style images
-                        style_images = style_images.reshape(-1, 3, 64, 256)
-                        style_features = style_extractor(style_images).to(args.device)
-                        style_coll.append({"imgs":style_images, "feats":style_features})
-            else:
-                style_images = None
-                style_features = None
             if args.latent == True:
                 x = torch.randn(
                     (n, 4, self.img_size[0] // 8, self.img_size[1] // 8)
                 ).to(args.device)
-                if cor_im == True:
-                    x_noise = torch.randn(cor_images.shape).to(args.device)
-
-                    timesteps = torch.full(
-                        (cor_images.shape[0],),
-                        999,
-                        device=args.device,
-                        dtype=torch.long,
-                    )
-
-                    noisy_images = noise_scheduler.add_noise(
-                        cor_images, x_noise, timesteps
-                    )
-                    x = noisy_images
             else:
                 x = torch.randn((n, 3, self.img_size[0], self.img_size[1])).to(
                     args.device
                 )
 
-            style_images = style_coll[0]["imgs"]
-            style_features = style_coll[0]["features"] * weight + (1-weight) * style_coll[1]["features"]
-
             # scheduler
             noise_scheduler.set_timesteps(50)
             for time in noise_scheduler.timesteps:
-
                 t_item = time.item()
                 t = (torch.ones(n) * t_item).long().to(args.device)
-
-                with torch.no_grad():
-                    noisy_residual = model(
-                        x,
-                        t,
-                        text_features,
-                        labels,
-                        original_images=style_images,
-                        mix_rate=mix_rate,
-                        style_extractor=style_features,
-                    )
-                    prev_noisy_sample = noise_scheduler.step(
-                        noisy_residual, time, x
-                    ).prev_sample
-                    x = prev_noisy_sample
+                noisy_residual = model.forward_interp(
+                    x=x,
+                    s1=labels[0].item(),
+                    s2=labels[1].item(),
+                    mix_rate=args.interp_weight,
+                    timesteps=t,
+                    context=text_features,
+                    original_images=None,
+                    style_extractor=None,
+                )
+                prev_noisy_sample = noise_scheduler.step(
+                    noisy_residual, time, x
+                ).prev_sample
+                x = prev_noisy_sample
 
         model.train()
         if args.latent == True:
