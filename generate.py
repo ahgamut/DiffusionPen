@@ -13,7 +13,6 @@ import uuid
 import json
 from diffusers import AutoencoderKL, DDIMScheduler
 import random
-from torchvision.utils import save_image
 from torch.nn import DataParallel
 from transformers import CanineModel, CanineTokenizer
 from torchvision import transforms
@@ -23,43 +22,10 @@ from models import EMA, Diffusion, UNetModel, ImageEncoder
 from utils.iam_dataset import IAMDataset
 from utils.GNHK_dataset import GNHK_Dataset
 from utils.auxilary_functions import *
-
-
-def setup_logging(args):
-    # os.makedirs("models", exist_ok=True)
-    os.makedirs(args.save_path, exist_ok=True)
-    os.makedirs(os.path.join(args.save_path, "models"), exist_ok=True)
-    os.makedirs(os.path.join(args.save_path, "images"), exist_ok=True)
-
-
-def save_images(images, path, args, **kwargs):
-    # print('image', images.shape)
-    grid = torchvision.utils.make_grid(images, padding=0, **kwargs)
-    if args.latent == True:
-        im = torchvision.transforms.ToPILImage()(grid)
-        if args.color == False:
-            im = im.convert("L")
-        else:
-            im = im.convert("RGB")
-    else:
-        ndarr = grid.permute(1, 2, 0).to("cpu").numpy()
-        im = Image.fromarray(ndarr)
-    im.save(path)
-    return im
-
-
-def crop_whitespace_width(img):
-    # tensor image to PIL
-    original_height = img.height
-    img_gray = np.array(img)
-    ret, thresholded = cv2.threshold(
-        img_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
-    )
-    coords = cv2.findNonZero(thresholded)
-    x, y, w, h = cv2.boundingRect(coords)
-    # rect = img.crop((x, 0, x + w, original_height))
-    rect = img.crop((x, y, x + w, y + h))
-    return np.array(rect)
+from utils.generation import (
+    setup_logging,
+    build_fake_image,
+)
 
 
 def main():
@@ -109,11 +75,8 @@ def main():
     ############################ DATASET ############################
     transform = transforms.Compose(
         [
-            # transforms.RandomAffine(degrees=10, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=0.1, fill=255),
             transforms.ToTensor(),
-            torchvision.transforms.Normalize(
-                (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
-            ),  # transforms.Normalize((0.5,), (0.5,)),  #
+            torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ]
     )
 
@@ -238,33 +201,24 @@ def main():
     )
     ema_model.eval()
 
-    text_words = [args.sampling_word]
-    # writer_id = random.randint(0, 339)
+    word = args.sampling_word
     writer_id = args.writer_id  # index for style class
-    for x_text in text_words:
-        print("Word:", x_text)
-        print("style", writer_id)
-        labels = torch.tensor([writer_id]).long().to(args.device)
-        ema_sampled_images = diffusion.sampling(
-            ema_model,
-            vae,
-            n=len(labels),
-            x_text=x_text,
-            labels=labels,
-            args=args,
-            style_extractor=feature_extractor,
-            noise_scheduler=ddim,
-            transform=transform,
-            character_classes=None,
-            tokenizer=tokenizer,
-            text_encoder=text_encoder,
-            run_idx=None,
-        )
-        save_single_images(
-            ema_sampled_images,
-            os.path.join(f"./image_samples/", f"{x_text}_style_{writer_id}.png"),
-            args,
-        )
+
+    image = build_fake_image(
+        word,
+        writer_id,
+        args,
+        diffusion,
+        ema_model,
+        vae,
+        feature_extractor,
+        ddim,
+        transform,
+        tokenizer,
+        text_encoder,
+    )
+    image = Image.fromarray(image)
+    image.save(os.path.join(f"./image_samples/", f"{word}_style_{writer_id}.png"))
 
 
 if __name__ == "__main__":
