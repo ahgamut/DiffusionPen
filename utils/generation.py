@@ -10,6 +10,7 @@ IMG_WIDTH = 256
 IMG_HEIGHT = 64
 PUNCTUATION = "_!\"#&'()*+,-./:;?"
 
+
 def setup_logging(args):
     os.makedirs(args.save_path, exist_ok=True)
     os.makedirs(os.path.join(args.save_path, "models"), exist_ok=True)
