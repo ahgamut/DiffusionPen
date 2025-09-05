@@ -209,5 +209,4 @@ def build_fake_image(
     im = im.convert("L")
     im = crop_whitespace_width(im)
     im = Image.fromarray(im)
-    im = np.array(im)
     return im

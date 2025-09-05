@@ -26,6 +26,7 @@ def main():
     add_common_args(parser)
     parser.add_argument("-w", "--writer-id", type=int, default=12)
     parser.add_argument("--sampling-word", type=str, default="hello")
+    parser.add_argument("-o", "--output", default="./output.png", help="output")
 
     args = parser.parse_args()
     print("torch version", torch.__version__)

@@ -49,8 +49,6 @@ def build_fakes(
 ):
     fakes = []
     for word in words:
-        if len(word) == longest_word_length:
-            max_word_length_width = im.width
         im = build_fake_image(
             word,
             s,
@@ -64,6 +62,8 @@ def build_fakes(
             tokenizer,
             text_encoder,
         )
+        if len(word) == longest_word_length:
+            max_word_length_width = im.width
         fakes.append(im)
     return fakes, max_word_length_width
 
