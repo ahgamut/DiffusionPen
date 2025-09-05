@@ -23,6 +23,15 @@ from models import EMA, Diffusion, UNetModel, ImageEncoder
 from utils.iam_dataset import IAMDataset
 from utils.GNHK_dataset import GNHK_Dataset
 from utils.auxilary_functions import *
+from utils.generation import (
+    setup_logging,
+    save_image_grid,
+    crop_whitespace_width,
+    build_fake_image,
+    add_rescale_padding,
+)
+from utils.arghandle import add_common_args
+
 
 torch.cuda.empty_cache()
 OUTPUT_MAX_LEN = 95  # + 2  # <GO>+groundtruth+<END>
@@ -30,43 +39,6 @@ IMG_WIDTH = 256
 IMG_HEIGHT = 64
 
 PUNCTUATION = "_!\"#&'()*+,-./:;?"
-
-
-def setup_logging(args):
-    # os.makedirs("models", exist_ok=True)
-    os.makedirs(args.save_path, exist_ok=True)
-    os.makedirs(os.path.join(args.save_path, "models"), exist_ok=True)
-    os.makedirs(os.path.join(args.save_path, "images"), exist_ok=True)
-
-
-def save_images(images, path, args, **kwargs):
-    # print('image', images.shape)
-    grid = torchvision.utils.make_grid(images, padding=0, **kwargs)
-    if args.latent == True:
-        im = torchvision.transforms.ToPILImage()(grid)
-        if args.color == False:
-            im = im.convert("L")
-        else:
-            im = im.convert("RGB")
-    else:
-        ndarr = grid.permute(1, 2, 0).to("cpu").numpy()
-        im = Image.fromarray(ndarr)
-    im.save(path)
-    return im
-
-
-def crop_whitespace_width(img):
-    # tensor image to PIL
-    original_height = img.height
-    img_gray = np.array(img)
-    ret, thresholded = cv2.threshold(
-        img_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
-    )
-    coords = cv2.findNonZero(thresholded)
-    x, y, w, h = cv2.boundingRect(coords)
-    # rect = img.crop((x, 0, x + w, original_height))
-    rect = img.crop((x, y, x + w, y + h))
-    return np.array(rect)
 
 
 def file_check(fname):
@@ -78,41 +50,12 @@ def file_check(fname):
 def main():
     """Main function"""
     parser = argparse.ArgumentParser("diffusion-paragraph-interp")
-    parser.add_argument(
-        "--model_name",
-        type=str,
-        default="diffusionpen",
-        help="(deprecated)",
-    )
-    parser.add_argument("--setname", default="iam", help="iam, cvl")
     parser.add_argument("--writer-1", type=int, default=1)
     parser.add_argument("--writer-2", type=int, default=3)
     parser.add_argument("--interp-weight", default=0.5, type=float, help="weight")
-    parser.add_argument("--img-size", type=int, default=(64, 256))
-    # UNET parameters
-    parser.add_argument("--channels", type=int, default=4)
-    parser.add_argument("--emb_dim", type=int, default=320)
-    parser.add_argument("--num_heads", type=int, default=4)
-    parser.add_argument("--num_res_blocks", type=int, default=1)
-    parser.add_argument(
-        "--save_path", type=str, default="./diffusionpen_iam_model_path"
-    )
-    parser.add_argument("--device", type=str, default="cuda:0")
-    parser.add_argument("--color", type=bool, default=True)
-    parser.add_argument("--latent", type=bool, default=True)
-    parser.add_argument("--img_feat", type=bool, default=True)
-    parser.add_argument("--interpolation", type=bool, default=False)
-    parser.add_argument("--dataparallel", type=bool, default=False)
-    parser.add_argument("--load_check", type=bool, default=False)
-    parser.add_argument("--mix_rate", type=float, default=None)
-    parser.add_argument(
-        "--style_path", type=str, default="./style_models/iam_style_diffusionpen.pth"
-    )
-    parser.add_argument(
-        "--stable_dif_path", type=str, default="./stable-diffusion-v1-5"
-    )
     parser.add_argument("-i", "--text-file", type=file_check, default="./sample.txt")
     parser.add_argument("-o", "--output", type=str, default="./output.png")
+    add_common_args(parsre)
 
     args = parser.parse_args()
     print("torch version", torch.__version__)
@@ -124,11 +67,8 @@ def main():
     ############################ DATASET ############################
     transform = transforms.Compose(
         [
-            # transforms.RandomAffine(degrees=10, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=0.1, fill=255),
             transforms.ToTensor(),
-            torchvision.transforms.Normalize(
-                (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
-            ),  # transforms.Normalize((0.5,), (0.5,)),  #
+            torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ]
     )
 
