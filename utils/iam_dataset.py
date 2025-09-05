@@ -1,8 +1,6 @@
 import numpy as np
-from skimage import io as img_io
 from PIL import Image, ImageOps
 import json
-import os
 import string
 
 #
@@ -10,7 +8,6 @@ from utils.word_dataset import WordLineDataset
 from utils.auxilary_functions import (
     image_resize_PIL,
     centered_PIL,
-    get_default_character_classes,
 )
 
 
@@ -167,10 +164,6 @@ class IAMDataset(WordLineDataset):
 
         info = gather_iam_info(self, subset, segmentation_level)
         data = []
-        widths = []
-        padded_imgs = 0
-        padded_data = []
-        character_classes = get_default_character_classes()
 
         for i, (img_path, transcr, writer_name) in enumerate(info):
 

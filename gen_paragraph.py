@@ -1,32 +1,20 @@
 import os
 import torch
 import torch.nn as nn
-import numpy as np
-from PIL import Image
-from torch.utils.data import DataLoader, random_split
 import torchvision
-from tqdm import tqdm
 from torch import optim
 import copy
 import argparse
-import uuid
-import json
 from diffusers import AutoencoderKL, DDIMScheduler
-import random
-from torchvision.utils import save_image
 from torch.nn import DataParallel
 from torchvision import transforms
 from transformers import CanineModel, CanineTokenizer
 
 #
-from models import EMA, Diffusion, UNetModel, ImageEncoder
-from utils.iam_dataset import IAMDataset
-from utils.GNHK_dataset import GNHK_Dataset
+from models import Diffusion, UNetModel, ImageEncoder
 from utils.auxilary_functions import *
 from utils.generation import (
     setup_logging,
-    save_image_grid,
-    crop_whitespace_width,
     build_fake_image,
     add_rescale_padding,
 )
@@ -151,12 +139,9 @@ def main():
     # print('unet', sum(p.numel() for p in unet.parameters() if p.requires_grad))
 
     optimizer = optim.AdamW(unet.parameters(), lr=0.0001)
-    lr_scheduler = None
 
-    mse_loss = nn.MSELoss()
     diffusion = Diffusion(img_size=args.img_size, args=args)
 
-    ema = EMA(0.995)
     ema_model = copy.deepcopy(unet).eval().requires_grad_(False)
 
     # load from last checkpoint
@@ -218,7 +203,6 @@ def main():
     print("unet loaded")
     unet.eval()
 
-    ema = EMA(0.995)
     ema_model = copy.deepcopy(unet).eval().requires_grad_(False)
     ema_model.load_state_dict(
         torch.load(
@@ -234,11 +218,7 @@ def main():
     lines = open(args.text_file).read()
     words = lines.strip().split(" ")
     fakes = []
-    gap = np.ones((64, 16))
     max_line_width = args.max_line_width
-    total_char_count = 0
-    avg_char_width = 0
-    current_line_width = 0
     longest_word_length = max(len(word) for word in words)
     s = args.writer_id
 

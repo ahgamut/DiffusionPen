@@ -1,32 +1,16 @@
 import os
 import torch
-import torch.nn as nn
-import numpy as np
 from PIL import Image, ImageOps
-from torch.utils.data import DataLoader, random_split
-import torchvision
 from tqdm import tqdm
-from torch import optim
-import copy
-import argparse
-import uuid
 import json
-from diffusers import AutoencoderKL, DDIMScheduler
 import random
 from torchvision import transforms
-from torchvision.utils import save_image
-from torch.nn import DataParallel
-from transformers import CanineModel, CanineTokenizer
 
 #
 from .auxiliary_functions import (
-    affine_transformation,
-    image_resize,
     image_resize_PIL,
-    centered,
     centered_PIL,
 )
-from .feature_extractor import ImageEncoder
 
 
 class AvgMeter:
@@ -128,18 +112,13 @@ class Diffusion:
         text_encoder=None,
     ):
         model.eval()
-        tensor_list = []
 
         with torch.no_grad():
             pbar = tqdm(test_loader)
-            style_feat = []
             for i, data in enumerate(pbar):
                 images = data[0].to(args.device)
                 transcr = data[1]
-                s_id = data[2].to(args.device)
                 style_images = data[3].to(args.device)
-                cor_im = data[5].to(args.device)
-                img_path = data[4]
                 text_features = tokenizer(
                     transcr,
                     padding="max_length",
@@ -227,7 +206,6 @@ class Diffusion:
         run_idx=None,
     ):
         model.eval()
-        tensor_list = []
 
         with torch.no_grad():
             style_images = None
@@ -252,7 +230,6 @@ class Diffusion:
                     # with open('./utils/splits_words/iam_test.txt', 'r') as f:
                     train_data = f.readlines()
                     train_data = [i.strip().split(",") for i in train_data]
-                    style_featur = []
                     for label in labels:
                         # print('label', label)
                         label_index = label.item()
@@ -493,7 +470,6 @@ class Diffusion:
         run_idx=None,
     ):
         model.eval()
-        tensor_list = []
         assert len(labels) == 2
         n = 1
 

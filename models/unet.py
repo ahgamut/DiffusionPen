@@ -8,9 +8,7 @@ from torch import einsum
 from einops import rearrange, repeat
 from inspect import isfunction
 import math
-import torchvision.models as models
 import random
-from transformers import CanineModel
 
 
 def checkpoint(func, inputs, params, flag):

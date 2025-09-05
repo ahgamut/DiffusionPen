@@ -1,38 +1,22 @@
 import torch
 import torch.nn as nn
-import torchvision.models as models
 from torch.nn.functional import cross_entropy
 from torchvision import transforms
-from torch.utils.data import DataLoader, Dataset, random_split
-import numpy as np
-from PIL import Image, ImageOps
-from os.path import isfile
-from skimage import io
-from torchvision.utils import save_image
-from skimage.transform import resize
+from torch.utils.data import DataLoader, random_split
 import os
 import argparse
 import torch.optim as optim
-import timm
-import cv2
 import time
-import json
-import random
 
 #
-from utils.word_dataset import LineListIO
 from utils.style_dataset import (
-    WordStyleDataset,
-    WLStyleDataset,
     IAMStyleDataset,
 )
 from utils.cvl_dataset import CVLStyleDataset
 from utils.auxilary_functions import (
     affine_transformation,
-    image_resize_PIL,
-    centered_PIL,
 )
-from models import ImageEncoder, Mixed_Encoder, AvgMeter
+from models import Mixed_Encoder, AvgMeter
 
 
 # ================ Performance and Loss Function ========================
@@ -87,13 +71,10 @@ def eval_class_epoch(model, validation_data, args):
     total_loss = 0
     total = 0
     n_corrects = 0
-    prediction_list = []
-    results = []
     with torch.no_grad():
         for i, data in enumerate(validation_data):
 
             image = data[0].to(args.device)
-            image_paths = data[4]
             label = data[2].to(args.device)
 
             output = model(image)
@@ -126,7 +107,6 @@ def train_epoch_triplet(train_loader, model, criterion, optimizer, device, args)
     for i, data in enumerate(pbar):
 
         img = data[0]
-        wid = data[2]
         # print('wid', wid)
         positive = data[3]
         negative = data[4]
@@ -363,7 +343,6 @@ def train_classification(
 ):  # scheduler # after optimizer
     """Start training"""
 
-    valid_accus = []
     num_of_no_improvement = 0
     best_acc = 0
 

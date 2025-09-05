@@ -1,5 +1,5 @@
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image
 from skimage.transform import resize
 import cv2
 
@@ -68,11 +68,9 @@ def centered(word_img, tsize, centering=(0.5, 0.5), border_value=None):
     diff_h = height - word_img.shape[0]
     if diff_h >= 0:
         pv = int(centering[0] * diff_h)
-        padh = (pv, diff_h - pv)
     else:
         diff_h = abs(diff_h)
         ys, ye = diff_h / 2, word_img.shape[0] - (diff_h - diff_h / 2)
-        padh = (0, 0)
     diff_w = width - word_img.shape[1]
     if diff_w >= 0:
         pv = int(centering[1] * diff_w)

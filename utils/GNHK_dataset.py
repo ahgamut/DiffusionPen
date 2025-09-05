@@ -1,5 +1,3 @@
-import numpy as np
-from skimage import io as img_io
 from PIL import Image, ImageOps
 import json
 import os
@@ -58,9 +56,7 @@ class GNHK_Dataset(WordLineDataset):
 
         info = gather_iam_info(self, subset)
         data = []
-        widths = []
         wr_dict = {}
-        character_classes = get_default_character_classes()
         for i, (img_path, transcr, writer_name) in enumerate(info):
 
             # create writer indexes
@@ -72,7 +68,6 @@ class GNHK_Dataset(WordLineDataset):
             # transform iam transcriptions
             transcr = transcr.replace(" ", "")
             # "We 'll" -> "We'll"
-            special_cases = ["s", "d", "ll", "m", "ve", "t", "re"]
             # lower-case
             # for cc in special_cases:
             #     transcr = transcr.replace("|\'" + cc, "\'" + cc)

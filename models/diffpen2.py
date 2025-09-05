@@ -1,33 +1,15 @@
 import os
 import torch
-import torch.nn as nn
-import numpy as np
 from PIL import Image, ImageOps
-from torch.utils.data import DataLoader, random_split
-import torchvision
-from tqdm import tqdm
-from torch import optim
-import copy
-import argparse
-import uuid
 import json
-from diffusers import AutoencoderKL, DDIMScheduler
 import random
 from torchvision import transforms
-from torchvision.utils import save_image
-from torch.nn import DataParallel
-from transformers import CanineModel, CanineTokenizer
 
 #
 from .auxiliary_functions import (
-    affine_transformation,
-    image_resize,
     image_resize_PIL,
-    centered,
     centered_PIL,
 )
-from .feature_extractor import ImageEncoder
-from .diffpen import AvgMeter, EMA
 
 
 def iam_resizefix(img_s):
@@ -121,7 +103,6 @@ class IAM_TempLoader:
         # print('label', label)
         cls.check_preload()
         # pick random image according to specific style
-        style_featur = []
         label_index = label.item()
 
         if interpol:
@@ -212,7 +193,6 @@ class Diffusion:
         run_idx=None,
     ):
         model.eval()
-        tensor_list = []
 
         with torch.no_grad():
             text_features = x_text  # [x_text]*n

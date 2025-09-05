@@ -28,7 +28,6 @@ def save_image_grid(images, path, args, **kwargs):
 
 def crop_whitespace_width(img):
     # tensor image to PIL
-    original_height = img.height
     img_gray = np.array(img)
     ret, thresholded = cv2.threshold(
         img_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU

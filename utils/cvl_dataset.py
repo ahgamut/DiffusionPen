@@ -1,12 +1,6 @@
 from os.path import isfile
 from PIL import Image, ImageOps
-from skimage import io as img_io
-from skimage.transform import resize
 from torch.utils.data import Dataset
-from torchvision.utils import save_image
-from torchvision import transforms
-import cv2
-import io
 import json
 import numpy as np
 import os
@@ -16,7 +10,6 @@ import torch
 from tqdm import tqdm
 
 #
-from utils.word_dataset import WordLineDataset
 from utils.auxilary_functions import (
     image_resize_PIL,
     centered_PIL,
@@ -277,7 +270,6 @@ class CVLStyleDataset(CVLBaseDataset):
         img = self.data[index][0]
         transcr = self.data[index][1]
         wid = self.data[index][2]
-        img_path = self.img_paths[index][0]
 
         # pick another sample that has the same writer id
         positive_wid = wid

@@ -3,32 +3,19 @@ import sys
 import traceback
 import torch
 import torch.nn as nn
-import numpy as np
-from PIL import Image
-from torch.utils.data import DataLoader, random_split
 import torchvision
-from tqdm import tqdm
-from torch import optim
 import copy
 import argparse
-import uuid
-import json
 from diffusers import AutoencoderKL, DDIMScheduler
-import random
 from torchvision import transforms
-from torchvision.utils import save_image
 from torch.nn import DataParallel
 from transformers import CanineModel, CanineTokenizer
 
 #
-from models import EMA, Diffusion, UNetModel, ImageEncoder
-from utils.iam_dataset import IAMDataset
-from utils.GNHK_dataset import GNHK_Dataset
+from models import Diffusion, UNetModel, ImageEncoder
 from utils.auxilary_functions import *
 from utils.generation import (
     setup_logging,
-    save_image_grid,
-    crop_whitespace_width,
     build_fake_image,
     add_rescale_padding,
 )
@@ -162,7 +149,6 @@ def main():
 
     diffusion = Diffusion(img_size=args.img_size, args=args)
 
-    ema = EMA(0.995)
     ema_model = copy.deepcopy(unet).eval().requires_grad_(False)
 
     # load from last checkpoint
@@ -220,7 +206,6 @@ def main():
     print("unet loaded")
     unet.eval()
 
-    ema = EMA(0.995)
     ema_model = copy.deepcopy(unet).eval().requires_grad_(False)
     ema_model.load_state_dict(
         torch.load(

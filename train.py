@@ -2,18 +2,14 @@ import os
 import torch
 import torch.nn as nn
 import numpy as np
-from PIL import Image
 from torch.utils.data import DataLoader, random_split
 import torchvision
 from tqdm import tqdm
 from torch import optim
 import copy
 import argparse
-import uuid
 import json
 from diffusers import AutoencoderKL, DDIMScheduler
-import random
-from torchvision.utils import save_image
 from torch.nn import DataParallel
 from transformers import CanineModel, CanineTokenizer
 from torchvision import transforms
@@ -24,7 +20,7 @@ from utils.cvl_dataset import CVLDataset
 from utils.iam_dataset import IAMDataset
 from utils.GNHK_dataset import GNHK_Dataset
 from utils.auxilary_functions import *
-from utils.generation import save_image_grid, setup_logging, crop_whitespace_width
+from utils.generation import save_image_grid, setup_logging
 from utils.arghandle import add_common_args
 
 torch.cuda.empty_cache()
@@ -218,7 +214,6 @@ def train(
     for epoch in range(args.epochs):
         print("Epoch:", epoch)
         pbar = tqdm(loader)
-        style_feat = []
         for i, data in enumerate(pbar):
             images = data[0].to(args.device)
             transcr = data[1]
@@ -245,7 +240,6 @@ def train(
                     images.to(torch.float32)
                 ).latent_dist.sample()
                 images = images * 0.18215
-                latents = images
 
             noise = torch.randn(images.shape).to(images.device)
             # Sample a random timestep for each image

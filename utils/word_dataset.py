@@ -1,20 +1,15 @@
 import io
 import os
 import numpy as np
-from skimage import io as img_io
 import torch
 from torch.utils.data import Dataset
 from os.path import isfile
 from skimage.transform import resize
 import tqdm
-from torchvision.utils import save_image
 import json
 import random
-from PIL import Image
-import cv2
 
 #
-from utils.auxilary_functions import image_resize_PIL, centered_PIL
 
 #
 
@@ -290,7 +285,6 @@ class WordLineDataset(Dataset):
 
         s_imgs = torch.stack(s_imgs)
 
-        style_features = torch.stack(style_features)
         # printed_word = torch.stack(printed_word)
         # bbox = torch.stack(bbox)
         cor_images_batch = torch.stack(cor_im)

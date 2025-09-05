@@ -1,11 +1,7 @@
 import torch
-from torchvision import transforms
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.utils.data import Dataset
 import numpy as np
 from PIL import Image, ImageOps
-from os.path import isfile
-from skimage import io
-from torchvision.utils import save_image
 from skimage.transform import resize
 from tqdm import tqdm
 import os
@@ -13,12 +9,9 @@ import json
 import random
 
 #
-from utils.word_dataset import LineListIO
 from utils.auxilary_functions import (
-    affine_transformation,
     image_resize_PIL,
     centered_PIL,
-    get_default_character_classes,
 )
 
 
@@ -433,7 +426,6 @@ class WLStyleDataset(Dataset):
         ) = zip(*batch)
 
         # Stack image tensors and caption tensors into batches
-        images_batch = torch.stack(img)
         # transcr_batch = torch.stack(transcr)
         char_tokens_batch = torch.stack(char_tokens)
 
