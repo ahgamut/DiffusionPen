@@ -26,44 +26,14 @@ from utils.generation import (
     setup_logging,
     build_fake_image,
 )
+from utils.arghandle import add_common_args
 
 
 def main():
-    """Main function"""
     parser = argparse.ArgumentParser("diffusionpen-singleword")
-    parser.add_argument(
-        "--model_name",
-        type=str,
-        default="diffusionpen",
-        help="(deprecated)",
-    )
-    parser.add_argument("--setname", default="iam", help="iam, cvl")
+    add_common_args(parser)
     parser.add_argument("-w", "--writer-id", type=int, default=12)
-    parser.add_argument("--level", type=str, default="word", help="word, line")
-    parser.add_argument("--img_size", type=int, default=(64, 256))
-    # UNET parameters
-    parser.add_argument("--channels", type=int, default=4)
-    parser.add_argument("--emb_dim", type=int, default=320)
-    parser.add_argument("--num_heads", type=int, default=4)
-    parser.add_argument("--num_res_blocks", type=int, default=1)
-    parser.add_argument(
-        "--save_path", type=str, default="./diffusionpen_iam_model_path"
-    )
-    parser.add_argument("--device", type=str, default="cuda:0")
-    parser.add_argument("--color", type=bool, default=True)
-    parser.add_argument("--latent", type=bool, default=True)
-    parser.add_argument("--img_feat", type=bool, default=True)
-    parser.add_argument("--interpolation", type=bool, default=False)
-    parser.add_argument("--dataparallel", type=bool, default=False)
-    parser.add_argument("--load_check", type=bool, default=False)
-    parser.add_argument("--mix_rate", type=float, default=None)
-    parser.add_argument(
-        "--style_path", type=str, default="./style_models/iam_style_diffusionpen.pth"
-    )
-    parser.add_argument(
-        "--stable_dif_path", type=str, default="./stable-diffusion-v1-5"
-    )
-    parser.add_argument("--sampling_word", type=str, default="hello")
+    parser.add_argument("--sampling-word", type=str, default="hello")
 
     args = parser.parse_args()
     print("torch version", torch.__version__)

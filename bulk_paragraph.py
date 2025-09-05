@@ -32,6 +32,7 @@ from utils.generation import (
     build_fake_image,
     add_rescale_padding,
 )
+from utils.arghandle import add_common_args
 
 torch.cuda.empty_cache()
 OUTPUT_MAX_LEN = 95  # + 2  # <GO>+groundtruth+<END>
@@ -97,43 +98,13 @@ def build_fakes(
 def main():
     """Main function"""
     parser = argparse.ArgumentParser("diffusion-paragraph-bulk")
-    parser.add_argument(
-        "--model_name",
-        type=str,
-        default="diffusionpen",
-        help="(deprecated)",
-    )
-    parser.add_argument("--setname", default="iam", help="iam, cvl")
     parser.add_argument("-w", "--writer-range", type=range_check, default=(1, 1))
-    parser.add_argument("--level", type=str, default="word", help="word, line")
-    parser.add_argument("--img-size", type=int, default=(64, 256))
     parser.add_argument(
         "--max-line-width", default=900, type=int, help="max line width"
     )
-    # UNET parameters
-    parser.add_argument("--channels", type=int, default=4)
-    parser.add_argument("--emb_dim", type=int, default=320)
-    parser.add_argument("--num_heads", type=int, default=4)
-    parser.add_argument("--num_res_blocks", type=int, default=1)
-    parser.add_argument(
-        "--save_path", type=str, default="./diffusionpen_iam_model_path"
-    )
-    parser.add_argument("--device", type=str, default="cuda:0")
-    parser.add_argument("--color", type=bool, default=True)
-    parser.add_argument("--latent", type=bool, default=True)
-    parser.add_argument("--img_feat", type=bool, default=True)
-    parser.add_argument("--interpolation", type=bool, default=False)
-    parser.add_argument("--dataparallel", type=bool, default=False)
-    parser.add_argument("--load_check", type=bool, default=False)
-    parser.add_argument("--mix_rate", type=float, default=None)
-    parser.add_argument(
-        "--style_path", type=str, default="./style_models/iam_style_diffusionpen.pth"
-    )
-    parser.add_argument(
-        "--stable_dif_path", type=str, default="./stable-diffusion-v1-5"
-    )
     parser.add_argument("-i", "--text-file", type=file_check, default="./sample.txt")
     parser.add_argument("-o", "--output", type=str, default="./output.png")
+    add_common_args(parser)
 
     args = parser.parse_args()
     print("torch version", torch.__version__)
