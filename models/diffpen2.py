@@ -180,6 +180,8 @@ class Diffusion:
         train_data,
         wr_dict,
         reverse_wr_dict,
+        transform,
+        args,
         interpol=False,
         cor_im=False,
     ):
@@ -335,6 +337,8 @@ class Diffusion:
                         train_data,
                         wr_dict,
                         reverse_wr_dict,
+                        transform,
+                        args,
                         cor_im=cor_im,
                         interpol=interpol,
                     )
