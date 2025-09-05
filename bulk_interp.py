@@ -122,6 +122,11 @@ def main():
 
     args = parser.parse_args()
     print("torch version", torch.__version__)
+    if args.tag == "i0":
+        func = build_fake_interp_0
+    else:
+        func = build_fake_interp_1
+        args.interpolation = False
 
     # create save directories
     setup_logging(args)
@@ -245,10 +250,6 @@ def main():
     )
     ema_model.eval()
 
-    if args.tag == "i0":
-        func = build_fake_interp_0
-    else:
-        func = build_fake_interp_1
 
     for writer_1 in range(1, 5):
         for writer_2 in range(writer_1 + 1, 5):
@@ -257,7 +258,7 @@ def main():
                 args.writer_2 = writer_2
                 args.mix_rate = weight
 
-                im0 = func(
+                im = func(
                     args=args,
                     diffusion=diffusion,
                     ema_model=ema_model,
