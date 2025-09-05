@@ -135,16 +135,16 @@ class Diffusion:
     ):
         #
         fheight, fwidth = 64, 256
+        device = args.device
         #
         five_refs = temp_loader.get_refs(label_index, 5)
-        five_styles = five_refs["paths"]
-        print("five_styles", five_styles)
+        # print("five_styles", five_refs["paths"])
 
         cor_image_random = temp_loader.get_refs(label_index, 1)
         if cor_im:
             cor_image = cor_image_random["imgs"][0]
             cor_image = iam_resizefix(cor_image)
-            cor_im_tens = transform(cor_image).to(args.device)
+            cor_im_tens = transform(cor_image).to(device)
             cor_im_tens = cor_im_tens.unsqueeze(0)
             cor_images = vae.module.encode(
                 cor_im_tens.to(torch.float32)
@@ -154,11 +154,11 @@ class Diffusion:
         st_imgs = []
         for im_idx, img_s in enumerate(five_refs["imgs"]):
             img_s = iam_resizefix(img_s)
-            img_tens = transform(img_s).to(args.device)  # .unsqueeze(0)
+            img_tens = transform(img_s).to(device)  # .unsqueeze(0)
             st_imgs += [img_tens]
 
         # save style images
-        style_images = torch.stack(st_imgs).to(args.device)
+        style_images = torch.stack(st_imgs).to(device)
         style_images = style_images.reshape(-1, 3, 64, 256)
         return style_images
 
