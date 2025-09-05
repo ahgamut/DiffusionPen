@@ -282,7 +282,7 @@ class Diffusion:
             x = (x * 255).type(torch.uint8)
         return x
 
-    def interp_sampling(
+    def interp_sampling0(
         self,
         model,
         vae,
@@ -339,6 +339,114 @@ class Diffusion:
                     context=text_features,
                     original_images=None,
                     style_extractor=None,
+                )
+                prev_noisy_sample = noise_scheduler.step(
+                    noisy_residual, time, x
+                ).prev_sample
+                x = prev_noisy_sample
+
+        model.train()
+        if args.latent == True:
+            latents = 1 / 0.18215 * x
+            image = vae.module.decode(latents).sample
+
+            image = (image / 2 + 0.5).clamp(0, 1)
+            image = image.cpu().permute(0, 2, 3, 1).numpy()
+
+            image = torch.from_numpy(image)
+            x = image.permute(0, 3, 1, 2)
+
+        else:
+            x = (x.clamp(-1, 1) + 1) / 2
+            x = (x * 255).type(torch.uint8)
+        return x
+
+    def interp_sampling(
+        self,
+        model,
+        vae,
+        x_text,
+        labels,
+        args,
+        style_extractor,
+        noise_scheduler,
+        mix_rate=None,
+        cfg_scale=3,
+        transform=None,
+        character_classes=None,
+        tokenizer=None,
+        text_encoder=None,
+        run_idx=None,
+    ):
+        model.eval()
+        assert len(labels) == 2
+        n = 1
+        temp_loader = None
+        cor_im = False
+        interpol = False
+
+        if mix_rate is None:
+            mix_rate = args.mix_rate
+        if args.dataset == "iam":
+            temp_loader = IAM_TempLoader
+        temp_loader.check_preload()
+        print("mix_rate", mix_rate)
+
+        with torch.no_grad():
+            text_features = x_text
+            text_features = tokenizer(
+                text_features,
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
+                max_length=40,
+            ).to(args.device)
+
+            style_coll = {"images": [], "features": []}
+
+            if args.img_feat:
+                for label in labels:
+                    label_index = label.item()
+                    s_imgs = self.get_style(
+                        label_index,
+                        transform,
+                        args,
+                        temp_loader,
+                        cor_im=cor_im,
+                        interpol=interpol,
+                    )
+                    s_feat = style_extractor(s_imgs).to(args.device)
+                    style_coll["images"].append([s_imgs])
+                    style_coll["features"].append(s_feat)
+
+                style_images = torch.cat(style_coll["images"][0])
+                style_features = style_coll["features"][0] * mix_rate + style_coll[
+                    "features"
+                ][1] * (1 - mix_rate)
+            else:
+                style_images = None
+                style_features = None
+
+            if args.latent == True:
+                x = torch.randn(
+                    (n, 4, self.img_size[0] // 8, self.img_size[1] // 8)
+                ).to(args.device)
+            else:
+                x = torch.randn((n, 3, self.img_size[0], self.img_size[1])).to(
+                    args.device
+                )
+
+            # scheduler
+            noise_scheduler.set_timesteps(50)
+            for time in noise_scheduler.timesteps:
+                t_item = time.item()
+                t = (torch.ones(n) * t_item).long().to(args.device)
+                noisy_residual = model(
+                    x=x,
+                    timesteps=t,
+                    context=text_features,
+                    original_images=style_images,
+                    style_extractor=style_features,
                 )
                 prev_noisy_sample = noise_scheduler.step(
                     noisy_residual, time, x
