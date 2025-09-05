@@ -47,7 +47,7 @@ class IAM_TempLoader:
         if cls.wr_dict is None:
             with open("utils/writers_dict_train_iam.json", "r") as f:
                 cls.wr_dict = json.load(f)
-            cls.reverse_wr_dict = {v: k for k, v in cls.wr_dict.items()}
+                cls.reverse_wr_dict = {v: k for k, v in cls.wr_dict.items()}
 
         if cls.train_data is None:
             with open("./utils/splits_words/iam_train_val.txt", "r") as f:
@@ -177,16 +177,20 @@ class Diffusion:
     def get_style(
         self,
         label_index,
-        train_data,
-        wr_dict,
-        reverse_wr_dict,
         transform,
         args,
+        temp_loader,
         interpol=False,
         cor_im=False,
     ):
+        temp_loader.check_preload()
+        wr_dict = temp_loader.wr_dict
+        reverse_wr_dict = temp_loader.reverse_wr_dict
+        train_data = temp_loader.train_data
+        #
         fheight, fwidth = 64, 256
         root_path = "./iam_data/words"
+        transform_tensor = transforms.ToTensor()
         matching_lines = [
             line
             for line in train_data
@@ -206,29 +210,11 @@ class Diffusion:
         print("five_styles", five_styles)
 
         cor_image_random = random.sample(matching_lines, 1)
-        # print('five_styles', five_styles)
-        # cor_image
         if cor_im:
             cor_image = Image.open(
                 os.path.join(root_path, cor_image_random[0][0])
             ).convert("RGB")
-            (cor_image_width, cor_image_height) = cor_image.size
-            cor_image = cor_image.resize(
-                (int(cor_image_width * 64 / cor_image_height), 64)
-            )
-            (cor_image_width, cor_image_height) = cor_image.size
-
-            if cor_image_width < 256:
-                outImg = ImageOps.pad(cor_image, size=(256, 64), color="white")
-                cor_image = outImg
-
-            else:
-                # reduce image until width is smaller than 256
-                while cor_image_width > 256:
-                    cor_image = image_resize_PIL(cor_image, width=cor_image_width - 20)
-                    (cor_image_width, cor_image_height) = cor_image.size
-                cor_image = centered_PIL(cor_image, (64, 256), border_value=255.0)
-
+            cor_image = iam_resizefix(cor_image)
             cor_im_tens = transform(cor_image).to(args.device)
             # print('cor image', cor_im_tens.shape)
             cor_im_tens = cor_im_tens.unsqueeze(0)
@@ -238,7 +224,6 @@ class Diffusion:
             cor_images = cor_images * 0.18215
 
         st_imgs = []
-        grid_imgs = []
         for im_idx, random_f in enumerate(five_styles):
             file_path = os.path.join(root_path, random_f[0])
             try:
@@ -254,34 +239,12 @@ class Diffusion:
                 replacement_file_path = os.path.join(root_path, name)
                 img_s = Image.open(replacement_file_path).convert("RGB")
 
-            (img_width, img_height) = img_s.size
-            img_s = img_s.resize((int(img_width * 64 / img_height), 64))
-            (img_width, img_height) = img_s.size
-
-            if img_width < 256:
-                outImg = ImageOps.pad(img_s, size=(256, 64), color="white")
-                img_s = outImg
-
-            else:
-                # reduce image until width is smaller than 256
-                while img_width > 256:
-                    img_s = image_resize_PIL(img_s, width=img_width - 20)
-                    (img_width, img_height) = img_s.size
-                img_s = centered_PIL(img_s, (64, 256), border_value=255.0)
-            # make grid of all 5 images
-            # img_s = img_s.convert('L')
-            transform_tensor = transforms.ToTensor()
-            grid_im = transform_tensor(img_s)
-            grid_imgs += [grid_im]
-
+            img_s = iam_resizefix(img_s)
             img_tens = transform(img_s).to(args.device)  # .unsqueeze(0)
             st_imgs += [img_tens]
-            # style_features = style_extractor(style_images).to(args.device)
-            # img_tensor = img_tensor.to(args.device)
-        style_images = torch.stack(st_imgs).to(args.device)
-        grid_imgs = torch.stack(grid_imgs).to(args.device)
 
         # save style images
+        style_images = torch.stack(st_imgs).to(args.device)
         style_images = style_images.reshape(-1, 3, 64, 256)
         return style_images
 
@@ -306,6 +269,10 @@ class Diffusion:
         model.eval()
         cor_im = False
         interpol = False
+        temp_loader = None
+
+        if args.dataset == "iam":
+            temp_loader = IAM_TempLoader
 
         with torch.no_grad():
             text_features = x_text
@@ -320,25 +287,13 @@ class Diffusion:
             style_coll = {"images": [], "features": []}
 
             if args.img_feat:
-                # pick random image according to specific style
-                with open("utils/writers_dict_train.json", "r") as f:
-                    wr_dict = json.load(f)
-                    reverse_wr_dict = {v: k for k, v in wr_dict.items()}
-
-                # key = reverse_wr_dict[value]
-                with open("./utils/splits_words/iam_train_val.txt", "r") as f:
-                    train_data = f.readlines()
-                    train_data = [i.strip().split(",") for i in train_data]
-
                 for label in labels:
                     label_index = label.item()
                     s_imgs = self.get_style(
                         label_index,
-                        train_data,
-                        wr_dict,
-                        reverse_wr_dict,
                         transform,
                         args,
+                        temp_loader,
                         cor_im=cor_im,
                         interpol=interpol,
                     )
