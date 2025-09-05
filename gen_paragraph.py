@@ -90,11 +90,8 @@ def main():
     ############################ DATASET ############################
     transform = transforms.Compose(
         [
-            # transforms.RandomAffine(degrees=10, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=0.1, fill=255),
             transforms.ToTensor(),
-            torchvision.transforms.Normalize(
-                (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
-            ),  # transforms.Normalize((0.5,), (0.5,)),  #
+            torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ]
     )
 

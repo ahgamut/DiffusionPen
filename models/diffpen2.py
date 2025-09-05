@@ -286,10 +286,8 @@ class Diffusion:
         self,
         model,
         vae,
-        n,
         x_text,
         labels,
-        weight,
         args,
         style_extractor,
         noise_scheduler,
@@ -304,6 +302,8 @@ class Diffusion:
         model.eval()
         assert len(labels) == 2
         n = 1
+        if mix_rate is None:
+            mix_rate = args.mix_rate
 
         with torch.no_grad():
             text_features = x_text  # [x_text]*n
