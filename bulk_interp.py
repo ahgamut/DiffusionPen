@@ -108,6 +108,15 @@ def build_fake_interp_1(
     im = Image.fromarray(im)
     return im
 
+def img_concat(imgs):
+    w = max(x.width for x in imgs)
+    h = sum(x.height for x in imgs)
+    dst = Image.new('RGB', (w, h))
+    ch = 0
+    for img in imgs:
+        dst.paste(img, (0, ch))
+        ch += img.height
+    return dst
 
 def main():
     """Main function"""
@@ -250,10 +259,12 @@ def main():
     )
     ema_model.eval()
 
-
+    w = 0.1
+    weights = np.arange(0, 1 + w, w)
     for writer_1 in range(1, 5):
         for writer_2 in range(writer_1 + 1, 5):
-            for weight in [0, 0.25, 0.5, 0.75, 1]:
+            imgs = []
+            for weight in weights:
                 args.writer_1 = writer_1
                 args.writer_2 = writer_2
                 args.mix_rate = weight
@@ -269,12 +280,14 @@ def main():
                     tokenizer=tokenizer,
                     text_encoder=text_encoder,
                 )
-                im.save(
-                    os.path.join(
-                        args.output,
-                        f"{args.tag}-{args.sampling_word}-{writer_1}-{writer_2}-{weight}.png",
-                    )
+                imgs.append(im)
+            dst = img_concat(imgs)
+            dst.save(
+                os.path.join(
+                    args.output,
+                    f"{args.tag}-{args.sampling_word}-{writer_1}-{writer_2}.png",
                 )
+            )
 
 
 if __name__ == "__main__":
