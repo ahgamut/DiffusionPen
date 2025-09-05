@@ -334,7 +334,7 @@ class Diffusion:
                     s1=labels[0].item(),
                     s2=labels[1].item(),
                     interpolation=True,
-                    mix_rate=args.interp_weight,
+                    mix_rate=args.mix_rate,
                     timesteps=t,
                     context=text_features,
                     original_images=None,
