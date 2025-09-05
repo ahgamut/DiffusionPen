@@ -213,7 +213,9 @@ class Diffusion:
             if args.img_feat == True:
                 cor_im = False
                 for label in labels:
-                    stuff = temp_loader.load(label, vae, args, interpol=False, cor_im=False)
+                    stuff = temp_loader.load(
+                        label, vae, args, interpol=False, cor_im=False
+                    )
                     style_images = stuff["style_images"].reshape(-1, 3, 64, 256)
                     style_features = style_extractor(style_images).to(args.device)
                     print(style_images.shape, style_features.shape)

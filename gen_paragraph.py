@@ -219,6 +219,7 @@ def main():
     words = lines.strip().split(" ")
     fakes = []
     max_line_width = args.max_line_width
+    max_word_length_width = 0
     longest_word_length = max(len(word) for word in words)
     s = args.writer_id
 

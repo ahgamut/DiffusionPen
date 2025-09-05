@@ -1,3 +1,4 @@
+import torch
 import os
 from PIL import Image
 import torchvision
