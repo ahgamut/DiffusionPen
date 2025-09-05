@@ -221,7 +221,7 @@ class Diffusion:
             x = prev_noisy_sample
         return x
 
-    def post_process_x(self, vae, args, x):
+    def post_process_x(self, args, x, vae):
         if args.latent:
             latents = 1 / 0.18215 * x
             image = vae.module.decode(latents).sample
@@ -298,9 +298,9 @@ class Diffusion:
             x = self.update_schedule_x(args, x, noise_scheduler, model, model_params)
 
         model.train()
-        return self.post_process_x(vae, args, x)
+        return self.post_process_x(args, x, vae)
 
-    def interp_sampling0(
+    def interp_0(
         self,
         model,
         vae,
@@ -324,8 +324,7 @@ class Diffusion:
             mix_rate = args.mix_rate
 
         with torch.no_grad():
-            text_features = x_text  # [x_text]*n
-            # print('text features', text_features.shape)
+            text_features = x_text
             text_features = tokenizer(
                 text_features,
                 padding="max_length",
@@ -333,53 +332,24 @@ class Diffusion:
                 return_tensors="pt",
                 max_length=40,
             ).to(args.device)
-            if args.latent == True:
-                x = torch.randn(
-                    (n, 4, self.img_size[0] // 8, self.img_size[1] // 8)
-                ).to(args.device)
-            else:
-                x = torch.randn((n, 3, self.img_size[0], self.img_size[1])).to(
-                    args.device
-                )
 
+            x = self.get_initial_x(args, noise_scheduler)
+            model_params = dict(
+                s1=labels[0].item(),
+                s2=labels[1].item(),
+                interpolation=True,
+                mix_rate=args.mix_rate,
+                context=text_features,
+                original_images=None,
+                style_extractor=None,
+            )
             # scheduler
-            noise_scheduler.set_timesteps(50)
-            for time in noise_scheduler.timesteps:
-                t_item = time.item()
-                t = (torch.ones(n) * t_item).long().to(args.device)
-                noisy_residual = model(
-                    x=x,
-                    s1=labels[0].item(),
-                    s2=labels[1].item(),
-                    interpolation=True,
-                    mix_rate=args.mix_rate,
-                    timesteps=t,
-                    context=text_features,
-                    original_images=None,
-                    style_extractor=None,
-                )
-                prev_noisy_sample = noise_scheduler.step(
-                    noisy_residual, time, x
-                ).prev_sample
-                x = prev_noisy_sample
+            x = self.update_schedule_x(args, x, noise_scheduler, model, model_params)
 
         model.train()
-        if args.latent == True:
-            latents = 1 / 0.18215 * x
-            image = vae.module.decode(latents).sample
+        return self.post_process_x(args, x, vae)
 
-            image = (image / 2 + 0.5).clamp(0, 1)
-            image = image.cpu().permute(0, 2, 3, 1).numpy()
-
-            image = torch.from_numpy(image)
-            x = image.permute(0, 3, 1, 2)
-
-        else:
-            x = (x.clamp(-1, 1) + 1) / 2
-            x = (x * 255).type(torch.uint8)
-        return x
-
-    def interp_sampling(
+    def interp_1(
         self,
         model,
         vae,
@@ -420,69 +390,30 @@ class Diffusion:
                 max_length=40,
             ).to(args.device)
 
-            style_coll = {"images": [], "features": []}
+            style_colls = []
 
             if args.img_feat:
                 for label in labels:
-                    label_index = label.item()
-                    s_imgs = self.get_style(
-                        label_index,
-                        transform,
-                        args,
-                        temp_loader,
-                        cor_im=cor_im,
-                        interpol=interpol,
+                    style_colls.append(
+                        self.get_style_coll(label.item(), transform, args, temp_loader)
                     )
-                    s_feat = style_extractor(s_imgs).to(args.device)
-                    style_coll["images"].append([s_imgs])
-                    style_coll["features"].append(s_feat)
 
-                style_images = torch.cat(style_coll["images"][0])
-                style_features = style_coll["features"][0] * mix_rate + style_coll[
+                style_images = torch.cat(style_colls[0]["images"])
+                style_features = style_colls[0]["features"] * mix_rate + style_colls[1][
                     "features"
-                ][1] * (1 - mix_rate)
+                ] * (1 - mix_rate)
             else:
                 style_images = None
                 style_features = None
 
-            if args.latent == True:
-                x = torch.randn(
-                    (n, 4, self.img_size[0] // 8, self.img_size[1] // 8)
-                ).to(args.device)
-            else:
-                x = torch.randn((n, 3, self.img_size[0], self.img_size[1])).to(
-                    args.device
-                )
+            x = self.get_initial_x(args, noise_scheduler, cor_im=False)
 
-            # scheduler
-            noise_scheduler.set_timesteps(50)
-            for time in noise_scheduler.timesteps:
-                t_item = time.item()
-                t = (torch.ones(n) * t_item).long().to(args.device)
-                noisy_residual = model(
-                    x=x,
-                    timesteps=t,
-                    context=text_features,
-                    original_images=style_images,
-                    style_extractor=style_features,
-                )
-                prev_noisy_sample = noise_scheduler.step(
-                    noisy_residual, time, x
-                ).prev_sample
-                x = prev_noisy_sample
+            model_params = dict(
+                context=text_features,
+                original_images=style_images,
+                style_extractor=style_features,
+            )
+            x = self.update_schedule_x(args, x, noise_scheduler, model, model_params)
 
         model.train()
-        if args.latent == True:
-            latents = 1 / 0.18215 * x
-            image = vae.module.decode(latents).sample
-
-            image = (image / 2 + 0.5).clamp(0, 1)
-            image = image.cpu().permute(0, 2, 3, 1).numpy()
-
-            image = torch.from_numpy(image)
-            x = image.permute(0, 3, 1, 2)
-
-        else:
-            x = (x.clamp(-1, 1) + 1) / 2
-            x = (x * 255).type(torch.uint8)
-        return x
+        return self.post_process_x(args, vae, x)

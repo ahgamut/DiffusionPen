@@ -56,7 +56,7 @@ def build_fake_interp(
     writer_2 = args.writer_2
     mix_rate = args.mix_rate
     labels = torch.tensor([writer_1, writer_2]).long().to(args.device)
-    ema_sampled_images = diffusion.interp_sampling(
+    ema_sampled_images = diffusion.interp_1(
         ema_model,
         vae,
         x_text=word,
