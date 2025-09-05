@@ -97,56 +97,6 @@ class IAM_TempLoader:
         result = {"paths": paths[:5], "imgs": imgs[:5]}
         return result
 
-    @classmethod
-    def load(cls, label, vae, args, interpol=False, cor_im=False):
-        result = dict()
-        # print('label', label)
-        cls.check_preload()
-        # pick random image according to specific style
-        label_index = label.item()
-
-        if interpol:
-            label2 = random.randint(0, 339)  # random label
-            five_styles = cls.get_refs(label2, 5)
-        else:
-            five_styles = cls.get_refs(label_index, 5)
-
-        print("five_styles", five_styles["paths"])
-        # cor_image
-        fheight, fwidth = 64, 256
-        if cor_im:
-            cor_image_random = cls.get_styles(label_index, 1)["imgs"]
-            cor_image = Image.open(
-                os.path.join(cls.root_path, cor_image_random[0])
-            ).convert("RGB")
-            cor_image = iam_resizefix(cor_image)
-            cor_im_tens = transform(cor_image).to(args.device)
-            # print('cor image', cor_im_tens.shape)
-            cor_im_tens = cor_im_tens.unsqueeze(0)
-            cor_images = vae.module.encode(
-                cor_im_tens.to(torch.float32)
-            ).latent_dist.sample()
-            cor_images = cor_images * 0.18215
-            result["cor_images"] = cor_images
-
-        st_imgs = []
-        grid_imgs = []
-        for im_idx, img_s in enumerate(five_styles["imgs"]):
-            img_s = iam_resizefix(img_s)
-            # make grid of all 5 images
-            # img_s = img_s.convert('L')
-            grid_im = cls.tform(img_s)
-            grid_imgs += [grid_im]
-            img_tens = cls.tform(img_s).to(args.device)  # .unsqueeze(0)
-            st_imgs += [img_tens]
-
-        grid_imgs = torch.stack(grid_imgs).to(args.device)
-        style_images = torch.stack(st_imgs).to(args.device)
-
-        result["grid_imgs"] = grid_imgs
-        result["style_images"] = style_images
-        return result
-
 
 class Diffusion:
     def __init__(
@@ -183,11 +133,8 @@ class Diffusion:
         interpol=False,
         cor_im=False,
     ):
-        temp_loader.check_preload()
         #
         fheight, fwidth = 64, 256
-        root_path = "./iam_data/words"
-        transform_tensor = transforms.ToTensor()
         #
         five_refs = temp_loader.get_refs(label_index, 5)
         five_styles = five_refs["paths"]
@@ -240,6 +187,7 @@ class Diffusion:
 
         if args.dataset == "iam":
             temp_loader = IAM_TempLoader
+        temp_loader.check_preload()
 
         with torch.no_grad():
             text_features = x_text
