@@ -5,6 +5,10 @@ import torchvision
 import cv2
 import numpy as np
 
+OUTPUT_MAX_LEN = 95  # + 2  # <GO>+groundtruth+<END>
+IMG_WIDTH = 256
+IMG_HEIGHT = 64
+PUNCTUATION = "_!\"#&'()*+,-./:;?"
 
 def setup_logging(args):
     os.makedirs(args.save_path, exist_ok=True)
@@ -48,7 +52,7 @@ def add_rescale_padding(
     scaled_padded_words = []
 
     for word, img in zip(words, fakes):
-        img_pil = Image.fromarray(img)
+        img_pil = img
         as_ratio = img_pil.width / img_pil.height
         # scaled_width = int(scaling_factor * len(word))#) * as_ratio * max_height)
         scaled_width = max(5, int(avg_char_width * len(word)))

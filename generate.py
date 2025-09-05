@@ -176,8 +176,7 @@ def main():
         tokenizer,
         text_encoder,
     )
-    image = Image.fromarray(image)
-    image.save(os.path.join(f"./image_samples/", f"{word}_style_{writer_id}.png"))
+    image.save(args.output)
 
 
 if __name__ == "__main__":

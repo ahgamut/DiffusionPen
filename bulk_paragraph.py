@@ -18,6 +18,7 @@ from utils.generation import (
     setup_logging,
     build_fake_image,
     add_rescale_padding,
+    build_paragraph_image
 )
 from utils.arghandle import add_common_args
 
