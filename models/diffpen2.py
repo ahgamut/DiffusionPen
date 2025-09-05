@@ -71,7 +71,7 @@ class IAM_TempLoader:
             cls.tform = transforms.ToTensor()
 
     @classmethod
-    def get_styles(cls, label_index, n_samples):
+    def get_refs(cls, label_index, n_samples):
         wid = cls.reverse_wr_dict[label_index]
         matching_lines = cls.wmap[wid]
 
@@ -107,9 +107,9 @@ class IAM_TempLoader:
 
         if interpol:
             label2 = random.randint(0, 339)  # random label
-            five_styles = cls.get_styles(label2, 5)
+            five_styles = cls.get_refs(label2, 5)
         else:
-            five_styles = cls.get_styles(label_index, 5)
+            five_styles = cls.get_refs(label_index, 5)
 
         print("five_styles", five_styles["paths"])
         # cor_image
@@ -184,39 +184,20 @@ class Diffusion:
         cor_im=False,
     ):
         temp_loader.check_preload()
-        wr_dict = temp_loader.wr_dict
-        reverse_wr_dict = temp_loader.reverse_wr_dict
-        train_data = temp_loader.train_data
         #
         fheight, fwidth = 64, 256
         root_path = "./iam_data/words"
         transform_tensor = transforms.ToTensor()
-        matching_lines = [
-            line
-            for line in train_data
-            if line[1] == reverse_wr_dict[label_index] and len(line[2]) > 3
-        ]
-
-        # pick the first 5 from matching lines
-        if len(matching_lines) >= 5:
-            five_styles = random.sample(matching_lines, 5)
-        else:
-            matching_lines = [
-                line for line in train_data if line[1] == reverse_wr_dict[label_index]
-            ]
-            five_styles = matching_lines_style[:5]
-            if len(five_styles) < 5:
-                five_styles = [matching_lines[0]] * 5
+        #
+        five_refs = temp_loader.get_refs(label_index, 5)
+        five_styles = five_refs["paths"]
         print("five_styles", five_styles)
 
-        cor_image_random = random.sample(matching_lines, 1)
+        cor_image_random = temp_loader.get_refs(label_index, 1)
         if cor_im:
-            cor_image = Image.open(
-                os.path.join(root_path, cor_image_random[0][0])
-            ).convert("RGB")
+            cor_image = cor_image_random["imgs"][0]
             cor_image = iam_resizefix(cor_image)
             cor_im_tens = transform(cor_image).to(args.device)
-            # print('cor image', cor_im_tens.shape)
             cor_im_tens = cor_im_tens.unsqueeze(0)
             cor_images = vae.module.encode(
                 cor_im_tens.to(torch.float32)
@@ -224,21 +205,7 @@ class Diffusion:
             cor_images = cor_images * 0.18215
 
         st_imgs = []
-        for im_idx, random_f in enumerate(five_styles):
-            file_path = os.path.join(root_path, random_f[0])
-            try:
-                img_s = Image.open(file_path).convert("RGB")
-            except ValueError:
-                # Handle the exception (e.g., print an error message)
-                print(f"Error loading image from {file_path}")
-
-                # Find a replacement image that is not corrupted
-                replacement_idx = (im_idx + 1) % 5
-                replacement_f = five_styles[replacement_idx]
-                name = replacement_f[0]  # .split(',')[1]
-                replacement_file_path = os.path.join(root_path, name)
-                img_s = Image.open(replacement_file_path).convert("RGB")
-
+        for im_idx, img_s in enumerate(five_refs["imgs"]):
             img_s = iam_resizefix(img_s)
             img_tens = transform(img_s).to(args.device)  # .unsqueeze(0)
             st_imgs += [img_tens]
