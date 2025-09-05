@@ -224,9 +224,9 @@ class Diffusion:
                 return_tensors="pt",
                 max_length=40,
             ).to(args.device)
-            if args.setname == "iam":
+            if args.dataset == "iam":
                 temp_loader = IAM_TempLoader
-            elif args.setname == "cvl":
+            elif args.dataset == "cvl":
                 temp_loader = CVL_TempLoader
             else:
                 temp_loader = None

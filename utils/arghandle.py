@@ -27,7 +27,7 @@ def add_common_args(parser):
         default="diffusionpen",
         help="(deprecated)",
     )
-    parser.add_argument("--setname", default="iam", help="iam, cvl")
+    parser.add_argument("--dataset", default="iam", help="iam, gnhk, cvl")
     parser.add_argument("--img-size", type=int, default=(64, 256))
     # UNET parameters
     parser.add_argument("--channels", type=int, default=4)

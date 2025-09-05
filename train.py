@@ -24,6 +24,8 @@ from utils.cvl_dataset import CVLDataset
 from utils.iam_dataset import IAMDataset
 from utils.GNHK_dataset import GNHK_Dataset
 from utils.auxilary_functions import *
+from utils.generation import save_image_grid, setup_logging, crop_whitespace_width
+from utils.arghandle import add_common_args
 
 torch.cuda.empty_cache()
 OUTPUT_MAX_LEN = 95  # + 2  # <GO>+groundtruth+<END>
@@ -79,43 +81,6 @@ print("num_tokens", num_tokens)
 
 print("num of character classes", char_classes)
 vocab_size = char_classes + num_tokens
-
-
-def setup_logging(args):
-    # os.makedirs("models", exist_ok=True)
-    os.makedirs(args.save_path, exist_ok=True)
-    os.makedirs(os.path.join(args.save_path, "models"), exist_ok=True)
-    os.makedirs(os.path.join(args.save_path, "images"), exist_ok=True)
-
-
-def save_images(images, path, args, **kwargs):
-    # print('image', images.shape)
-    grid = torchvision.utils.make_grid(images, padding=0, **kwargs)
-    if args.latent == True:
-        im = torchvision.transforms.ToPILImage()(grid)
-        if args.color == False:
-            im = im.convert("L")
-        else:
-            im = im.convert("RGB")
-    else:
-        ndarr = grid.permute(1, 2, 0).to("cpu").numpy()
-        im = Image.fromarray(ndarr)
-    im.save(path)
-    return im
-
-
-def crop_whitespace_width(img):
-    # tensor image to PIL
-    original_height = img.height
-    img_gray = np.array(img)
-    ret, thresholded = cv2.threshold(
-        img_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
-    )
-    coords = cv2.findNonZero(thresholded)
-    x, y, w, h = cv2.boundingRect(coords)
-    # rect = img.crop((x, 0, x + w, original_height))
-    rect = img.crop((x, y, x + w, y + h))
-    return np.array(rect)
 
 
 def build_IAMDataset(args, transform):
@@ -337,7 +302,7 @@ def train(
                     )
 
                     epoch_n = epoch
-                    sampled_ema = save_images(
+                    sampled_ema = save_image_grid(
                         ema_sampled_images,
                         os.path.join(
                             args.save_path, "images", f"{x_text}_{epoch_n}_ema.jpg"
@@ -362,7 +327,7 @@ def train(
                     text_encoder=text_encoder,
                 )
                 epoch_n = epoch
-                sampled_ema = save_images(
+                sampled_ema = save_image_grid(
                     ema_sampled_images,
                     os.path.join(args.save_path, "images", f"{epoch_n}_ema.jpg"),
                     args,
@@ -406,39 +371,9 @@ def main():
     parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--batch-size", type=int, default=320)
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument(
-        "--model-name",
-        type=str,
-        default="diffusionpen",
-        help="(deprecated)",
-    )
     parser.add_argument("--level", type=str, default="word", help="word, line")
-    parser.add_argument("--img-size", type=int, default=(64, 256))
-    parser.add_argument("--dataset", type=str, default="iam", help="iam, gnhk, cvl")
-    # UNET parameters
-    parser.add_argument("--channels", type=int, default=4)
-    parser.add_argument("--emb-dim", type=int, default=320)
-    parser.add_argument("--num-heads", type=int, default=4)
-    parser.add_argument("--num-res_blocks", type=int, default=1)
-    parser.add_argument(
-        "--save-path", type=str, default="./diffusionpen_iam_model_path"
-    )
-    parser.add_argument("--device", type=str, default="cuda:0")
-    parser.add_argument("--color", type=bool, default=True)
-    parser.add_argument("--latent", type=bool, default=True)
-    parser.add_argument("--img-feat", type=bool, default=True)
-    parser.add_argument("--interpolation", type=bool, default=False)
-    parser.add_argument("--dataparallel", type=bool, default=False)
-    parser.add_argument("--load-check", type=bool, default=False)
-    parser.add_argument("--sampling-word", type=bool, default=False)
-    parser.add_argument("--mix-rate", type=float, default=None)
     parser.add_argument("--style-name", default="mobilenetv2_100", type=str)
-    parser.add_argument(
-        "--style-path", type=str, default="./style_models/iam_style_diffusionpen.pth"
-    )
-    parser.add_argument(
-        "--stable-dif-path", type=str, default="./stable-diffusion-v1-5"
-    )
+    add_common_args(parser)
     args = parser.parse_args()
 
     print("torch version", torch.__version__)
