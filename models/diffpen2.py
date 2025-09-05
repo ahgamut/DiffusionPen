@@ -317,7 +317,7 @@ class Diffusion:
                 max_length=40,
             ).to(args.device)
 
-            style_coll = {"images":[], "features": []}
+            style_coll = {"images": [], "features": []}
 
             if args.img_feat:
                 # pick random image according to specific style
