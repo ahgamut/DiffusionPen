@@ -163,7 +163,7 @@ class Diffusion:
         return style_images
 
     def get_style_coll(
-        self, label_index, transform, args, temp_loader, cor_im=False, interpol=False
+        self, label_index, transform, args, temp_loader, style_extractor, cor_im=False, interpol=False
     ):
         style_coll = dict()
         s_imgs = self.get_style(
@@ -179,7 +179,7 @@ class Diffusion:
         style_coll["features"] = s_feat
         return style_coll
 
-    def get_initial_x(self, args, noise_scheduler, cor_im=False):
+    def get_initial_x(self, args, n, noise_scheduler, cor_im=False):
         if args.latent:
             x = torch.randn((n, 4, self.img_size[0] // 8, self.img_size[1] // 8)).to(
                 args.device
@@ -201,6 +201,7 @@ class Diffusion:
     def update_schedule_x(
         self,
         args,
+        n,
         x,
         noise_scheduler,
         model,
@@ -276,16 +277,16 @@ class Diffusion:
             if args.img_feat:
                 for label in labels:
                     style_colls.append(
-                        self.get_style_coll(label.item(), transform, args, temp_loader)
+                        self.get_style_coll(label.item(), transform, args, temp_loader, style_extractor)
                     )
-                style_images = torch.cat(style_colls[0]["images"])
-                style_features = torch.cat(style_colls[0]["features"])
+                style_images = style_colls[0]["images"]
+                style_features = style_colls[0]["features"]
             else:
                 style_images = None
                 style_features = None
 
             #
-            x = self.get_initial_x(args, noise_scheduler, cor_im=False)
+            x = self.get_initial_x(args, n, noise_scheduler, cor_im=False)
 
             # scheduler
             model_params = dict(
@@ -295,7 +296,7 @@ class Diffusion:
                 mix_rate=mix_rate,
                 style_extractor=style_features,
             )
-            x = self.update_schedule_x(args, x, noise_scheduler, model, model_params)
+            x = self.update_schedule_x(args, n, x, noise_scheduler, model, model_params)
 
         model.train()
         return self.post_process_x(args, x, vae)
@@ -333,7 +334,7 @@ class Diffusion:
                 max_length=40,
             ).to(args.device)
 
-            x = self.get_initial_x(args, noise_scheduler)
+            x = self.get_initial_x(args, n, noise_scheduler)
             model_params = dict(
                 s1=labels[0].item(),
                 s2=labels[1].item(),
@@ -344,7 +345,7 @@ class Diffusion:
                 style_extractor=None,
             )
             # scheduler
-            x = self.update_schedule_x(args, x, noise_scheduler, model, model_params)
+            x = self.update_schedule_x(args, n, x, noise_scheduler, model, model_params)
 
         model.train()
         return self.post_process_x(args, x, vae)
@@ -395,10 +396,10 @@ class Diffusion:
             if args.img_feat:
                 for label in labels:
                     style_colls.append(
-                        self.get_style_coll(label.item(), transform, args, temp_loader)
+                        self.get_style_coll(label.item(), transform, args, temp_loader, style_extractor)
                     )
 
-                style_images = torch.cat(style_colls[0]["images"])
+                style_images = style_colls[0]["images"]
                 style_features = style_colls[0]["features"] * mix_rate + style_colls[1][
                     "features"
                 ] * (1 - mix_rate)
@@ -406,14 +407,14 @@ class Diffusion:
                 style_images = None
                 style_features = None
 
-            x = self.get_initial_x(args, noise_scheduler, cor_im=False)
+            x = self.get_initial_x(args, n, noise_scheduler, cor_im=False)
 
             model_params = dict(
                 context=text_features,
                 original_images=style_images,
                 style_extractor=style_features,
             )
-            x = self.update_schedule_x(args, x, noise_scheduler, model, model_params)
+            x = self.update_schedule_x(args, n, x, noise_scheduler, model, model_params)
 
         model.train()
-        return self.post_process_x(args, vae, x)
+        return self.post_process_x(args, x, vae)
