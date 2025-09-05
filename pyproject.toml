@@ -1,0 +1,11 @@
+[tool.autoflake]
+remove-duplicate-keys = true
+remove-unused-variables = true
+remove-all-unused-imports = true
+ignore-init-module-imports = true
+remove-rhs-for-unused-variables = true
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
