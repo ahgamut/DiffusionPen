@@ -11,7 +11,8 @@ from torchvision import transforms
 from transformers import CanineModel, CanineTokenizer
 
 #
-from models import Diffusion, UNetModel, ImageEncoder
+from models import UNetModel, ImageEncoder
+from models.diffpen2 import Diffusion
 from utils.auxilary_functions import *
 from utils.generation import (
     setup_logging,

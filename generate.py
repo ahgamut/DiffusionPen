@@ -1,7 +1,5 @@
-import os
 import torch
 import torch.nn as nn
-from PIL import Image
 import torchvision
 from torch import optim
 import copy
@@ -12,7 +10,8 @@ from transformers import CanineModel, CanineTokenizer
 from torchvision import transforms
 
 #
-from models import Diffusion, UNetModel, ImageEncoder
+from models import UNetModel, ImageEncoder
+from models.diffpen2 import Diffusion
 from utils.auxilary_functions import *
 from utils.generation import (
     setup_logging,

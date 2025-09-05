@@ -281,3 +281,82 @@ class Diffusion:
             x = (x.clamp(-1, 1) + 1) / 2
             x = (x * 255).type(torch.uint8)
         return x
+
+    def interp_sampling(
+        self,
+        model,
+        vae,
+        n,
+        x_text,
+        labels,
+        weight,
+        args,
+        style_extractor,
+        noise_scheduler,
+        mix_rate=None,
+        cfg_scale=3,
+        transform=None,
+        character_classes=None,
+        tokenizer=None,
+        text_encoder=None,
+        run_idx=None,
+    ):
+        model.eval()
+        assert len(labels) == 2
+        n = 1
+
+        with torch.no_grad():
+            text_features = x_text  # [x_text]*n
+            # print('text features', text_features.shape)
+            text_features = tokenizer(
+                text_features,
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
+                max_length=40,
+            ).to(args.device)
+            if args.latent == True:
+                x = torch.randn(
+                    (n, 4, self.img_size[0] // 8, self.img_size[1] // 8)
+                ).to(args.device)
+            else:
+                x = torch.randn((n, 3, self.img_size[0], self.img_size[1])).to(
+                    args.device
+                )
+
+            # scheduler
+            noise_scheduler.set_timesteps(50)
+            for time in noise_scheduler.timesteps:
+                t_item = time.item()
+                t = (torch.ones(n) * t_item).long().to(args.device)
+                noisy_residual = model(
+                    x=x,
+                    s1=labels[0].item(),
+                    s2=labels[1].item(),
+                    interpolation=True,
+                    mix_rate=args.interp_weight,
+                    timesteps=t,
+                    context=text_features,
+                    original_images=None,
+                    style_extractor=None,
+                )
+                prev_noisy_sample = noise_scheduler.step(
+                    noisy_residual, time, x
+                ).prev_sample
+                x = prev_noisy_sample
+
+        model.train()
+        if args.latent == True:
+            latents = 1 / 0.18215 * x
+            image = vae.module.decode(latents).sample
+
+            image = (image / 2 + 0.5).clamp(0, 1)
+            image = image.cpu().permute(0, 2, 3, 1).numpy()
+
+            image = torch.from_numpy(image)
+            x = image.permute(0, 3, 1, 2)
+
+        else:
+            x = (x.clamp(-1, 1) + 1) / 2
+            x = (x * 255).type(torch.uint8)
+        return x
