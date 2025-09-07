@@ -215,3 +215,41 @@ def build_fake_image(
     im = crop_whitespace_width(im)
     im = Image.fromarray(im)
     return im
+
+
+def build_fake_interp_1(
+    args,
+    diffusion,
+    ema_model,
+    vae,
+    feature_extractor,
+    ddim,
+    transform,
+    tokenizer,
+    text_encoder,
+):
+    # print("Word:", word)
+    word = args.sampling_word
+    writer_1 = args.writer_1
+    writer_2 = args.writer_2
+    labels = torch.tensor([writer_1, writer_2]).long().to(args.device)
+    ema_sampled_images = diffusion.interp_1(
+        ema_model,
+        vae,
+        x_text=word,
+        labels=labels,
+        args=args,
+        style_extractor=feature_extractor,
+        noise_scheduler=ddim,
+        transform=transform,
+        character_classes=None,
+        tokenizer=tokenizer,
+        text_encoder=text_encoder,
+        run_idx=None,
+    )
+    image = ema_sampled_images.squeeze(0)
+    im = torchvision.transforms.ToPILImage()(image)
+    im = im.convert("L")
+    im = crop_whitespace_width(im)
+    im = Image.fromarray(im)
+    return im

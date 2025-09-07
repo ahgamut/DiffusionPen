@@ -18,9 +18,7 @@ from models.diffpen2 import Diffusion
 from utils.auxilary_functions import *
 from utils.generation import (
     setup_logging,
-    crop_whitespace_width,
-    add_rescale_padding,
-    build_paragraph_image,
+    build_fake_interp_1,
 )
 from utils.arghandle import add_common_args
 
@@ -33,109 +31,31 @@ IMG_HEIGHT = 64
 PUNCTUATION = "_!\"#&'()*+,-./:;?"
 
 
-def build_fake_interp_0(
-    args,
-    diffusion,
-    ema_model,
-    vae,
-    feature_extractor,
-    ddim,
-    transform,
-    tokenizer,
-    text_encoder,
-):
-    # print("Word:", word)
-    word = args.sampling_word
-    writer_1 = args.writer_1
-    writer_2 = args.writer_2
-    labels = torch.tensor([writer_1, writer_2]).long().to(args.device)
-    ema_sampled_images = diffusion.interp_0(
-        ema_model,
-        vae,
-        x_text=word,
-        labels=labels,
-        args=args,
-        style_extractor=feature_extractor,
-        noise_scheduler=ddim,
-        transform=transform,
-        character_classes=None,
-        tokenizer=tokenizer,
-        text_encoder=text_encoder,
-        run_idx=None,
-    )
-    image = ema_sampled_images.squeeze(0)
-    im = torchvision.transforms.ToPILImage()(image)
-    im = im.convert("L")
-    im = crop_whitespace_width(im)
-    im = Image.fromarray(im)
-    return im
-
-
-def build_fake_interp_1(
-    args,
-    diffusion,
-    ema_model,
-    vae,
-    feature_extractor,
-    ddim,
-    transform,
-    tokenizer,
-    text_encoder,
-):
-    # print("Word:", word)
-    word = args.sampling_word
-    writer_1 = args.writer_1
-    writer_2 = args.writer_2
-    labels = torch.tensor([writer_1, writer_2]).long().to(args.device)
-    ema_sampled_images = diffusion.interp_1(
-        ema_model,
-        vae,
-        x_text=word,
-        labels=labels,
-        args=args,
-        style_extractor=feature_extractor,
-        noise_scheduler=ddim,
-        transform=transform,
-        character_classes=None,
-        tokenizer=tokenizer,
-        text_encoder=text_encoder,
-        run_idx=None,
-    )
-    image = ema_sampled_images.squeeze(0)
-    im = torchvision.transforms.ToPILImage()(image)
-    im = im.convert("L")
-    im = crop_whitespace_width(im)
-    im = Image.fromarray(im)
-    return im
-
 def img_concat(imgs):
     w = max(x.width for x in imgs)
     h = sum(x.height for x in imgs)
-    dst = Image.new('RGB', (w, h))
+    dst = Image.new("RGB", (w, h))
     ch = 0
     for img in imgs:
         dst.paste(img, (0, ch))
         ch += img.height
     return dst
 
+
 def main():
     """Main function"""
     parser = argparse.ArgumentParser("diffusion-bulk-interp")
-    parser.add_argument("--tag", default="i0", help="tag")
+    parser.add_argument("--tag", default="i1", help="tag")
     parser.add_argument("--writer-1", type=int, default=1)
     parser.add_argument("--writer-2", type=int, default=3)
     parser.add_argument("--sampling-word", type=str, default="hello")
     parser.add_argument("-o", "--output", type=str, default="./outputs/")
     add_common_args(parser)
-    parser.set_defaults(interpolation=True)
+    parser.set_defaults(interpolation=False)
 
     args = parser.parse_args()
     print("torch version", torch.__version__)
-    if args.tag == "i0":
-        func = build_fake_interp_0
-    else:
-        func = build_fake_interp_1
-        args.interpolation = False
+    args.tag = "i1"
 
     # create save directories
     setup_logging(args)
@@ -269,7 +189,7 @@ def main():
                 args.writer_2 = writer_2
                 args.mix_rate = weight
 
-                im = func(
+                im = build_fake_interp_1(
                     args=args,
                     diffusion=diffusion,
                     ema_model=ema_model,
