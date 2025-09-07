@@ -286,9 +286,9 @@ def main():
 
         #
         rid = "%04x" % random.randint(0, 1000)
-        raw_crop.save(os.path.join(args.output, f"{xpr.id}-orig.png"))
-        regen_img.save(os.path.join(args.output, f"{xpr.id}-fake-{rid}.png"))
-        regen_alt.save(os.path.join(args.output, f"{xpr.id}-alt-{rid}.png"))
+        raw_crop.save(os.path.join(args.output, f"{xpr.id}_orig.png"))
+        regen_img.save(os.path.join(args.output, f"{xpr.id}_fake_{rid}.png"))
+        regen_alt.save(os.path.join(args.output, f"{xpr.id}_alt_{rid}.png"))
 
 
 if __name__ == "__main__":
