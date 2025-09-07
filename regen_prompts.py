@@ -42,7 +42,7 @@ def file_check(fname):
 
 def build_ref_paragraph(fakes, xpr, max_line_width, longest_word_length):
     assert len(xpr.words) == len(fakes)
-    dupe = Image.new("RGB", size=(xpr.width, xpr.height), color="white")
+    dupe = Image.new("RGB", size=(xpr.img_width, xpr.img_height), color="white")
 
     for i in range(len(fakes)):
         word = xpr.words[i]
@@ -55,7 +55,7 @@ def build_ref_paragraph(fakes, xpr, max_line_width, longest_word_length):
         dupe.paste(scaled_img, (word.x_start, word.y_start))
 
     dupe = dupe.convert("L")
-    return dupe
+    return xpr.get_cropped(dupe)
 
 
 def build_fakes(
