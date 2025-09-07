@@ -71,8 +71,16 @@ class IAM_TempLoader:
             cls.tform = transforms.ToTensor()
 
     @classmethod
+    def map_index_to_wid(cls, label_index):
+        return cls.reverse_wr_dict[label_index]
+
+    @classmethod
+    def map_wid_to_index(cls, wid):
+        return cls.wr_dict[wid]
+
+    @classmethod
     def get_refs(cls, label_index, n_samples):
-        wid = cls.reverse_wr_dict[label_index]
+        wid = cls.map_index_to_wid(label_index)
         matching_lines = cls.wmap[wid]
 
         paths = []
@@ -163,7 +171,14 @@ class Diffusion:
         return style_images
 
     def get_style_coll(
-        self, label_index, transform, args, temp_loader, style_extractor, cor_im=False, interpol=False
+        self,
+        label_index,
+        transform,
+        args,
+        temp_loader,
+        style_extractor,
+        cor_im=False,
+        interpol=False,
     ):
         style_coll = dict()
         s_imgs = self.get_style(
@@ -277,7 +292,9 @@ class Diffusion:
             if args.img_feat:
                 for label in labels:
                     style_colls.append(
-                        self.get_style_coll(label.item(), transform, args, temp_loader, style_extractor)
+                        self.get_style_coll(
+                            label.item(), transform, args, temp_loader, style_extractor
+                        )
                     )
                 style_images = style_colls[0]["images"]
                 style_features = style_colls[0]["features"]
@@ -396,7 +413,9 @@ class Diffusion:
             if args.img_feat:
                 for label in labels:
                     style_colls.append(
-                        self.get_style_coll(label.item(), transform, args, temp_loader, style_extractor)
+                        self.get_style_coll(
+                            label.item(), transform, args, temp_loader, style_extractor
+                        )
                     )
 
                 style_images = style_colls[0]["images"]
