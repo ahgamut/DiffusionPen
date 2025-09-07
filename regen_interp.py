@@ -254,7 +254,7 @@ def main():
     weights = np.arange(0, 1 + w, w)
 
     for i in range(args.num_samples):
-        rid = "%04x" % random.randint(1000)
+        rid = "%04x" % random.randint(0, 1000)
         s1 = random.randint(0, 338)
         s2 = random.randint(0, 338)
         while s2 == s1:
@@ -289,7 +289,36 @@ def main():
         gen_1 = build_paragraph_image(
             scaled_padded_words, max_line_width=max_line_width
         )
-        gen_1.save(os.path.join(args.output, f"gen_{s}_{rid}_1.png"))
+        gen_1.save(os.path.join(args.output, f"intgen_{s1}_{rid}_1.png"))
+
+        # generate with s2
+        fakes = []
+        max_word_length_width = 0
+        fakes, max_word_length_width = build_fakes(
+            words,
+            s=s2,
+            args=args,
+            diffusion=diffusion,
+            ema_model=ema_model,
+            vae=vae,
+            feature_extractor=feature_extractor,
+            ddim=ddim,
+            transform=transform,
+            tokenizer=tokenizer,
+            text_encoder=text_encoder,
+            longest_word_length=longest_word_length,
+            max_word_length_width=max_word_length_width,
+        )
+        scaled_padded_words = add_rescale_padding(
+            words,
+            fakes,
+            max_word_length_width=max_word_length_width,
+            longest_word_length=longest_word_length,
+        )
+        gen_2 = build_paragraph_image(
+            scaled_padded_words, max_line_width=max_line_width
+        )
+        gen_2.save(os.path.join(args.output, f"intgen_{s2}_{rid}_1.png"))
 
         for weight in weights:
             # generate with interpolated style
@@ -319,7 +348,7 @@ def main():
             gen_int = build_paragraph_image(
                 scaled_padded_words, max_line_width=max_line_width
             )
-            gen_int.save(os.path.join(args.output, f"gen_{s1}_{s2}_{weight}_{rid}.png"))
+            gen_int.save(os.path.join(args.output, f"intgen_{s1}_{s2}_{weight}_{rid}.png"))
 
 
 if __name__ == "__main__":

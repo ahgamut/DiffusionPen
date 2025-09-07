@@ -1,3 +1,4 @@
+import glob
 import random
 import os
 import torch
@@ -74,7 +75,7 @@ def build_fakes(
 
 def main():
     parser = argparse.ArgumentParser("regen-prompts")
-    parser.add_argument("-n", "--num-prompts", default=1, help="number of prompts")
+    parser.add_argument("-n", "--num-prompts", default=1, type=int, help="number of prompts")
     parser.add_argument("-o", "--output", type=str, default="./outputs/")
     parser.add_argument("--alt-text", default="./prompts/sample.txt", help="alt text")
     add_common_args(parser)
@@ -213,14 +214,20 @@ def main():
 
     coll_xmls = list(glob.glob("./iam_data/xml/*.xml"))
     alt_lines = open(args.alt_text).read()
-    alt_words = lines.strip().split(" ")
+    alt_words = alt_lines.strip().split(" ")
 
     print("duplicating prompt")
     for i in range(args.num_prompts):
-        xpr = XMLPrompt(random.choice(coll_xmls))
+        fname = random.choice(coll_xmls)
+        xpr = XMLPrompt(fname)
         raw_orig = Image.open(os.path.join("./iam_data", "forms", xpr.id + ".png"))
         raw_crop = xpr.get_cropped(raw_orig)
-        s = IAM_Temploader.map_wid_to_index(xpr.writer_id)
+        while xpr.writer_id not in IAM_TempLoader.wr_dict:
+            fname = random.choice(coll_xmls)
+            xpr = XMLPrompt(fname)
+            raw_orig = Image.open(os.path.join("./iam_data", "forms", xpr.id + ".png"))
+            raw_crop = xpr.get_cropped(raw_orig)
+        s = IAM_TempLoader.map_wid_to_index(xpr.writer_id)
         max_line_width = raw_crop.width
 
         # same prompt

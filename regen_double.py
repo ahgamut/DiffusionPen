@@ -278,7 +278,7 @@ def main():
             scaled_padded_words, max_line_width=max_line_width
         )
 
-        rid = "%04x" % random.randint(1000)
+        rid = "%04x" % random.randint(0, 1000)
         gen_1.save(os.path.join(args.output, f"gen_{s}_{rid}_1.png"))
         gen_2.save(os.path.join(args.output, f"gen_{s}_{rid}_2.png"))
 
