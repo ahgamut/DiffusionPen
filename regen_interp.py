@@ -348,7 +348,9 @@ def main():
             gen_int = build_paragraph_image(
                 scaled_padded_words, max_line_width=max_line_width
             )
-            gen_int.save(os.path.join(args.output, f"intgen_{s1}_{s2}_{weight}_{rid}.png"))
+            gen_int.save(
+                os.path.join(args.output, f"intgen_{s1}_{s2}_{weight:.1f}_{rid}.png")
+            )
 
 
 if __name__ == "__main__":

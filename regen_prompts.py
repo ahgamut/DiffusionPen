@@ -1,4 +1,6 @@
 import glob
+import sys
+import traceback
 import random
 import os
 import torch
@@ -90,6 +92,21 @@ def build_fakes(
             max_word_length_width = im.width
         fakes.append(im)
     return fakes, max_word_length_width
+
+
+def load_prompt(coll):
+    xpr = None
+    fname = None
+    try:
+        fname = random.choice(coll)
+        xpr = XMLPrompt(fname)
+        assert xpr.writer_id in IAM_TempLoader.wr_dict
+    except Exception:
+        print(f"failed to read {fname}")
+        tb = traceback.format_tb(sys.exc_info()[2])
+        print("".join(tb))
+        xpr = None
+    return xpr
 
 
 def main():
@@ -239,91 +256,92 @@ def main():
 
     print("duplicating prompt")
     for i in range(args.num_prompts):
-        fname = random.choice(coll_xmls)
-        xpr = XMLPrompt(fname)
-        raw_orig = Image.open(os.path.join("./iam_data", "forms", xpr.id + ".png"))
-        raw_crop = xpr.get_cropped(raw_orig)
-        while xpr.writer_id not in IAM_TempLoader.wr_dict:
-            fname = random.choice(coll_xmls)
-            xpr = XMLPrompt(fname)
+        try:
+            xpr = load_prompt(coll_xmls)
+            while xpr is None:
+                xpr = load_prompt(coll_xmls)
             raw_orig = Image.open(os.path.join("./iam_data", "forms", xpr.id + ".png"))
             raw_crop = xpr.get_cropped(raw_orig)
-        s = IAM_TempLoader.map_wid_to_index(xpr.writer_id)
-        max_line_width = raw_crop.width
+            s = IAM_TempLoader.map_wid_to_index(xpr.writer_id)
+            max_line_width = raw_crop.width
 
-        # same prompt
-        words = [w.raw for w in xpr.words]
-        fakes = []
-        max_word_length_width = 0
-        longest_word_length = max(len(word) for word in words)
+            # same prompt
+            words = [w.raw for w in xpr.words]
+            fakes = []
+            max_word_length_width = 0
+            longest_word_length = max(len(word) for word in words)
 
-        fakes, max_word_length_width = build_fakes(
-            words,
-            s,
-            args=args,
-            diffusion=diffusion,
-            ema_model=ema_model,
-            vae=vae,
-            feature_extractor=feature_extractor,
-            ddim=ddim,
-            transform=transform,
-            tokenizer=tokenizer,
-            text_encoder=text_encoder,
-            longest_word_length=longest_word_length,
-            max_word_length_width=max_word_length_width,
-        )
-        scaled_padded_words = add_rescale_padding(
-            words,
-            fakes,
-            max_word_length_width=max_word_length_width,
-            longest_word_length=longest_word_length,
-        )
-        regen_img = build_paragraph_image(
-            scaled_padded_words, max_line_width=max_line_width
-        )
-        regen_img2 = build_ref_paragraph(
-            fakes,
-            xpr,
-            max_line_width=max_line_width,
-            longest_word_length=longest_word_length,
-        )
+            fakes, max_word_length_width = build_fakes(
+                words,
+                s,
+                args=args,
+                diffusion=diffusion,
+                ema_model=ema_model,
+                vae=vae,
+                feature_extractor=feature_extractor,
+                ddim=ddim,
+                transform=transform,
+                tokenizer=tokenizer,
+                text_encoder=text_encoder,
+                longest_word_length=longest_word_length,
+                max_word_length_width=max_word_length_width,
+            )
+            scaled_padded_words = add_rescale_padding(
+                words,
+                fakes,
+                max_word_length_width=max_word_length_width,
+                longest_word_length=longest_word_length,
+            )
+            regen_img = build_paragraph_image(
+                scaled_padded_words, max_line_width=max_line_width
+            )
+            regen_img2 = build_ref_paragraph(
+                fakes,
+                xpr,
+                max_line_width=max_line_width,
+                longest_word_length=longest_word_length,
+            )
 
-        #
-        words = alt_words
-        fakes = []
-        max_word_length_width = 0
-        longest_word_length = max(len(word) for word in words)
-        fakes, max_word_length_width = build_fakes(
-            words,
-            s,
-            args=args,
-            diffusion=diffusion,
-            ema_model=ema_model,
-            vae=vae,
-            feature_extractor=feature_extractor,
-            ddim=ddim,
-            transform=transform,
-            tokenizer=tokenizer,
-            text_encoder=text_encoder,
-            longest_word_length=longest_word_length,
-            max_word_length_width=max_word_length_width,
-        )
-        scaled_padded_words = add_rescale_padding(
-            words,
-            fakes,
-            max_word_length_width=max_word_length_width,
-            longest_word_length=longest_word_length,
-        )
-        regen_alt = build_paragraph_image(
-            scaled_padded_words, max_line_width=max_line_width
-        )
+            #
+            words = alt_words
+            fakes = []
+            max_word_length_width = 0
+            longest_word_length = max(len(word) for word in words)
+            fakes, max_word_length_width = build_fakes(
+                words,
+                s,
+                args=args,
+                diffusion=diffusion,
+                ema_model=ema_model,
+                vae=vae,
+                feature_extractor=feature_extractor,
+                ddim=ddim,
+                transform=transform,
+                tokenizer=tokenizer,
+                text_encoder=text_encoder,
+                longest_word_length=longest_word_length,
+                max_word_length_width=max_word_length_width,
+            )
+            scaled_padded_words = add_rescale_padding(
+                words,
+                fakes,
+                max_word_length_width=max_word_length_width,
+                longest_word_length=longest_word_length,
+            )
+            regen_alt = build_paragraph_image(
+                scaled_padded_words, max_line_width=max_line_width
+            )
 
-        #
-        rid = "%04x" % random.randint(0, 1000)
-        raw_crop.save(os.path.join(args.output, f"{xpr.id}_orig.png"))
-        regen_img.save(os.path.join(args.output, f"{xpr.id}_fake_{rid}.png"))
-        regen_img2.save(os.path.join(args.output, f"{xpr.id}_fake_sz_{rid}.png"))
-        regen_alt.save(os.path.join(args.output, f"{xpr.id}_alt_{rid}.png"))
+            #
+            rid = "%04x" % random.randint(0, 1000)
+            raw_crop.save(os.path.join(args.output, f"{xpr.id}_orig.png"))
+            regen_img.save(os.path.join(args.output, f"{xpr.id}_fake_{rid}.png"))
+            regen_img2.save(os.path.join(args.output, f"{xpr.id}_fake-sz_{rid}.png"))
+            regen_alt.save(os.path.join(args.output, f"{xpr.id}_alt_{rid}.png"))
+        except Exception as e:
+            print(e)
+            tb = traceback.format_tb(sys.exc_info()[2])
+            print("".join(tb))
 
 
 if __name__ == "__main__":
