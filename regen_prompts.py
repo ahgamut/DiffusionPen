@@ -11,6 +11,7 @@ from diffusers import AutoencoderKL, DDIMScheduler
 from torch.nn import DataParallel
 from torchvision import transforms
 from transformers import CanineModel, CanineTokenizer
+from PIL import Image, ImageDraw
 
 #
 from models import UNetModel, ImageEncoder
@@ -35,6 +36,24 @@ def file_check(fname):
     if os.path.isfile(fname):
         return fname
     raise RuntimeError(f"{fname} is not a file")
+
+
+def build_ref_paragraph(fakes, xpr, max_line_width, longest_word_length):
+    assert len(xpr.words) == len(fakes)
+    dupe = Image.new("RGB", size=(xpr.width, xpr.height), color="white")
+
+    for i in range(len(fakes)):
+        word = xpr.words[i]
+        fake = fakes[i]
+        ratio = word.height / fake.height
+        #
+        scaled_width = int(fake.width * ratio)
+        scaled_height = word.height
+        scaled_img = fakes[i].resize((scaled_width, scaled_height))
+        dupe.paste(scaled_img, (word.x_start, word.y_start))
+
+    dupe = dupe.convert("L")
+    return dupe
 
 
 def build_fakes(
@@ -75,7 +94,9 @@ def build_fakes(
 
 def main():
     parser = argparse.ArgumentParser("regen-prompts")
-    parser.add_argument("-n", "--num-prompts", default=1, type=int, help="number of prompts")
+    parser.add_argument(
+        "-n", "--num-prompts", default=1, type=int, help="number of prompts"
+    )
     parser.add_argument("-o", "--output", type=str, default="./outputs/")
     parser.add_argument("--alt-text", default="./prompts/sample.txt", help="alt text")
     add_common_args(parser)
@@ -260,6 +281,12 @@ def main():
         regen_img = build_paragraph_image(
             scaled_padded_words, max_line_width=max_line_width
         )
+        regen_img2 = build_ref_paragraph(
+            fakes,
+            xpr,
+            max_line_width=max_line_width,
+            longest_word_length=longest_word_length,
+        )
 
         #
         words = alt_words
@@ -295,6 +322,7 @@ def main():
         rid = "%04x" % random.randint(0, 1000)
         raw_crop.save(os.path.join(args.output, f"{xpr.id}_orig.png"))
         regen_img.save(os.path.join(args.output, f"{xpr.id}_fake_{rid}.png"))
+        regen_img2.save(os.path.join(args.output, f"{xpr.id}_fake_sz_{rid}.png"))
         regen_alt.save(os.path.join(args.output, f"{xpr.id}_alt_{rid}.png"))
 
 
