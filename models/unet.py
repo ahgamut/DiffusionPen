@@ -1397,45 +1397,27 @@ class UNetModel(nn.Module):
         if style_extractor is not None:
             s_id = style_extractor
             y = s_id.to(x.device)
+            b, e = emb.shape
 
-        if self.interpolation:
+            y = y.reshape(b, 5, -1)
+            y = torch.mean(y, dim=1)
 
-            s1 = random.randint(0, 338)
-            s2 = random.randint(0, 338)
-            while s1 == s2:
-                s2 = random.randint(0, 338)
-            y1 = torch.tensor([s1]).long().to(x.device)
-            y2 = torch.tensor([s2]).long().to(x.device)
-            y1 = self.label_emb(y1).to(x.device)
-            y2 = self.label_emb(y2).to(x.device)
-            y = (1 - self.mix_rate) * y1 + self.mix_rate * y2
+            noise = False
+            if noise == True:
+                magn = torch.norm(y, dim=1, keepdim=True)
+                noise = torch.randn_like(y) * 0.25
+                # bernoulli mask in noise
+                noise = noise * torch.bernoulli(torch.ones_like(noise) * 0.2)
 
-            y = y.to(x.device)
+                y = y + noise
+                y = magn * y / torch.norm(y, dim=1, keepdim=True)
+
+            y = self.style_lin(y)
+
             emb = emb + y
+
         else:
-            if style_extractor is not None:
-
-                b, e = emb.shape
-
-                y = y.reshape(b, 5, -1)
-                y = torch.mean(y, dim=1)
-
-                noise = False
-                if noise == True:
-                    magn = torch.norm(y, dim=1, keepdim=True)
-                    noise = torch.randn_like(y) * 0.25
-                    # bernoulli mask in noise
-                    noise = noise * torch.bernoulli(torch.ones_like(noise) * 0.2)
-
-                    y = y + noise
-                    y = magn * y / torch.norm(y, dim=1, keepdim=True)
-
-                y = self.style_lin(y)
-
-                emb = emb + y
-
-            else:
-                emb = emb + self.label_emb(y)
+            emb = emb + self.label_emb(y)
 
         if context is not None:
 
