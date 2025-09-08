@@ -475,7 +475,6 @@ class Diffusion:
         interpol = False
         temp_loader = None
         assert args.img_feat
-        assert n == 1
         assert len(labels) == 1
 
         if args.dataset == "iam":
@@ -490,7 +489,7 @@ class Diffusion:
             for i in range(n):
                 style_colls.append(
                     self.get_style_coll(
-                        label.item(), transform, args, temp_loader, style_extractor
+                        labels[0].item(), transform, args, temp_loader, style_extractor
                     )
                 )
             style_features = torch.stack([x["features"] for x in style_colls])

@@ -65,7 +65,7 @@ def build_fakes(
     max_word_length_width,
 ):
     labels = torch.tensor([writer_id]).long().to(args.device)
-    ema_sampled_images = diffusion.sampling(
+    ema_sampled_images = diffusion.sampling_bulk(
         ema_model,
         vae,
         x_text=words,
@@ -82,6 +82,7 @@ def build_fakes(
     fakes = []
     topil = torchvision.transforms.ToPILImage()
     for i in range(len(words)):
+        word = words[i]
         image = ema_sampled_images[i].squeeze(0)
         im = topil(image)
         im = im.convert("L")
