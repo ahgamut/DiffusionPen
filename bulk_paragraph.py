@@ -64,7 +64,7 @@ def build_fakes(
     longest_word_length,
     max_word_length_width,
 ):
-    labels = torch.tensor([writer_id]).long().to(args.device)
+    labels = torch.tensor([s]).long().to(args.device)
     ema_sampled_images = diffusion.sampling_bulk(
         ema_model,
         vae,
