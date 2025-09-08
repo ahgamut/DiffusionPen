@@ -254,6 +254,11 @@ def main():
     alt_lines = open(args.alt_text).read()
     alt_words = alt_lines.strip().split(" ")
 
+    def distort(x):
+        if "the" in x:
+            return x.replace("the", "thx")
+        return x
+
     print("duplicating prompt")
     for i in range(args.num_prompts):
         try:
@@ -265,8 +270,8 @@ def main():
             s = IAM_TempLoader.map_wid_to_index(xpr.writer_id)
             max_line_width = raw_crop.width
 
-            # same prompt
-            words = [w.raw for w in xpr.words]
+            # same prompt, but 'the' -> 'thx'
+            words = [distort(w.raw) for w in xpr.words]
             fakes = []
             max_word_length_width = 0
             longest_word_length = max(len(word) for word in words)

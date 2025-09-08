@@ -1,3 +1,5 @@
+import sys
+import traceback
 import random
 import os
 import torch
@@ -262,71 +264,13 @@ def main():
         args.writer_1 = s1
         args.writer_2 = s2
 
-        # generate with s1
-        fakes = []
-        max_word_length_width = 0
-        fakes, max_word_length_width = build_fakes(
-            words,
-            s=s1,
-            args=args,
-            diffusion=diffusion,
-            ema_model=ema_model,
-            vae=vae,
-            feature_extractor=feature_extractor,
-            ddim=ddim,
-            transform=transform,
-            tokenizer=tokenizer,
-            text_encoder=text_encoder,
-            longest_word_length=longest_word_length,
-            max_word_length_width=max_word_length_width,
-        )
-        scaled_padded_words = add_rescale_padding(
-            words,
-            fakes,
-            max_word_length_width=max_word_length_width,
-            longest_word_length=longest_word_length,
-        )
-        gen_1 = build_paragraph_image(
-            scaled_padded_words, max_line_width=max_line_width
-        )
-        gen_1.save(os.path.join(args.output, f"intgen_{s1}_{rid}_1.png"))
-
-        # generate with s2
-        fakes = []
-        max_word_length_width = 0
-        fakes, max_word_length_width = build_fakes(
-            words,
-            s=s2,
-            args=args,
-            diffusion=diffusion,
-            ema_model=ema_model,
-            vae=vae,
-            feature_extractor=feature_extractor,
-            ddim=ddim,
-            transform=transform,
-            tokenizer=tokenizer,
-            text_encoder=text_encoder,
-            longest_word_length=longest_word_length,
-            max_word_length_width=max_word_length_width,
-        )
-        scaled_padded_words = add_rescale_padding(
-            words,
-            fakes,
-            max_word_length_width=max_word_length_width,
-            longest_word_length=longest_word_length,
-        )
-        gen_2 = build_paragraph_image(
-            scaled_padded_words, max_line_width=max_line_width
-        )
-        gen_2.save(os.path.join(args.output, f"intgen_{s2}_{rid}_1.png"))
-
-        for weight in weights:
-            # generate with interpolated style
-            args.mix_rate = weight
+        try:
+            # generate with s1
             fakes = []
             max_word_length_width = 0
-            fakes, max_word_length_width = build_fakes_interp(
+            fakes, max_word_length_width = build_fakes(
                 words,
+                s=s1,
                 args=args,
                 diffusion=diffusion,
                 ema_model=ema_model,
@@ -345,12 +289,77 @@ def main():
                 max_word_length_width=max_word_length_width,
                 longest_word_length=longest_word_length,
             )
-            gen_int = build_paragraph_image(
+            gen_1 = build_paragraph_image(
                 scaled_padded_words, max_line_width=max_line_width
             )
-            gen_int.save(
-                os.path.join(args.output, f"intgen_{s1}_{s2}_{weight:.1f}_{rid}.png")
+            gen_1.save(os.path.join(args.output, f"intgen_{s1}_{rid}_1.png"))
+
+            # generate with s2
+            fakes = []
+            max_word_length_width = 0
+            fakes, max_word_length_width = build_fakes(
+                words,
+                s=s2,
+                args=args,
+                diffusion=diffusion,
+                ema_model=ema_model,
+                vae=vae,
+                feature_extractor=feature_extractor,
+                ddim=ddim,
+                transform=transform,
+                tokenizer=tokenizer,
+                text_encoder=text_encoder,
+                longest_word_length=longest_word_length,
+                max_word_length_width=max_word_length_width,
             )
+            scaled_padded_words = add_rescale_padding(
+                words,
+                fakes,
+                max_word_length_width=max_word_length_width,
+                longest_word_length=longest_word_length,
+            )
+            gen_2 = build_paragraph_image(
+                scaled_padded_words, max_line_width=max_line_width
+            )
+            gen_2.save(os.path.join(args.output, f"intgen_{s2}_{rid}_1.png"))
+
+            for weight in weights:
+                # generate with interpolated style
+                args.mix_rate = weight
+                fakes = []
+                max_word_length_width = 0
+                fakes, max_word_length_width = build_fakes_interp(
+                    words,
+                    args=args,
+                    diffusion=diffusion,
+                    ema_model=ema_model,
+                    vae=vae,
+                    feature_extractor=feature_extractor,
+                    ddim=ddim,
+                    transform=transform,
+                    tokenizer=tokenizer,
+                    text_encoder=text_encoder,
+                    longest_word_length=longest_word_length,
+                    max_word_length_width=max_word_length_width,
+                )
+                scaled_padded_words = add_rescale_padding(
+                    words,
+                    fakes,
+                    max_word_length_width=max_word_length_width,
+                    longest_word_length=longest_word_length,
+                )
+                gen_int = build_paragraph_image(
+                    scaled_padded_words, max_line_width=max_line_width
+                )
+                gen_int.save(
+                    os.path.join(
+                        args.output, f"intgen_{s1}_{s2}_{weight:.1f}_{rid}.png"
+                    )
+                )
+        except Exception as e:
+            print(e)
+            tb = traceback.format_tb(sys.exc_info()[2])
+            print("".join(tb))
 
 
 if __name__ == "__main__":

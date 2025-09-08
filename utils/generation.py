@@ -67,9 +67,9 @@ def add_rescale_padding(
             h_punc = scaled_img.height
             as_ratio_punct = w_punc / h_punc
             if word == ".":
-                scaled_img = scaled_img.resize((int(5 * as_ratio_punct), 5))
+                scaled_img = scaled_img.resize((max(int(5 * as_ratio_punct), 5), 5))
             else:
-                scaled_img = scaled_img.resize((int(13 * as_ratio_punct), 13))
+                scaled_img = scaled_img.resize((max(int(13 * as_ratio_punct), 13), 13))
             # pad on top and leave the image in the bottom
             padding_bottom = 10
             padding_top = (
