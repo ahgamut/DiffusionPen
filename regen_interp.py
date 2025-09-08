@@ -20,7 +20,7 @@ from utils.auxilary_functions import *
 from utils.generation import (
     setup_logging,
     build_fake_image,
-    build_fake_interp_1,
+    crop_whitespace_width,
     add_rescale_padding,
     build_paragraph_image,
 )
@@ -53,21 +53,30 @@ def build_fakes(
     longest_word_length,
     max_word_length_width,
 ):
+    labels = torch.tensor([s]).long().to(args.device)
+    ema_sampled_images = diffusion.sampling_bulk(
+        ema_model,
+        vae,
+        x_text=words,
+        labels=labels,
+        args=args,
+        style_extractor=feature_extractor,
+        noise_scheduler=ddim,
+        transform=transform,
+        character_classes=None,
+        tokenizer=tokenizer,
+        text_encoder=text_encoder,
+        run_idx=None,
+    )
     fakes = []
-    for word in words:
-        im = build_fake_image(
-            word,
-            s,
-            args,
-            diffusion,
-            ema_model,
-            vae,
-            feature_extractor,
-            ddim,
-            transform,
-            tokenizer,
-            text_encoder,
-        )
+    topil = torchvision.transforms.ToPILImage()
+    for i in range(len(words)):
+        word = words[i]
+        image = ema_sampled_images[i].squeeze(0)
+        im = topil(image)
+        im = im.convert("L")
+        im = crop_whitespace_width(im)
+        im = Image.fromarray(im)
         if len(word) == longest_word_length:
             max_word_length_width = im.width
         fakes.append(im)
@@ -89,19 +98,31 @@ def build_fakes_interp(
     max_word_length_width,
 ):
     fakes = []
-    for word in words:
-        args.sampling_word = word
-        im = build_fake_interp_1(
-            args,
-            diffusion,
-            ema_model,
-            vae,
-            feature_extractor,
-            ddim,
-            transform,
-            tokenizer,
-            text_encoder,
-        )
+    writer_1 = args.writer_1
+    writer_2 = args.writer_2
+    labels = torch.tensor([writer_1, writer_2]).long().to(args.device)
+    ema_sampled_images = diffusion.interp_bulk(
+        ema_model,
+        vae,
+        x_text=words,
+        labels=labels,
+        args=args,
+        style_extractor=feature_extractor,
+        noise_scheduler=ddim,
+        transform=transform,
+        character_classes=None,
+        tokenizer=tokenizer,
+        text_encoder=text_encoder,
+        run_idx=None,
+    )
+    topil = torchvision.transforms.ToPILImage()
+    for i in range(len(words)):
+        word = words[i]
+        image = ema_sampled_images[i].squeeze(0)
+        im = topil(image)
+        im = im.convert("L")
+        im = crop_whitespace_width(im)
+        im = Image.fromarray(im)
         if len(word) == longest_word_length:
             max_word_length_width = im.width
         fakes.append(im)

@@ -509,3 +509,69 @@ class Diffusion:
 
         model.train()
         return self.post_process_x(args, x, vae)
+
+    def interp_bulk(
+        self,
+        model,
+        vae,
+        x_text,
+        labels,
+        args,
+        style_extractor,
+        noise_scheduler,
+        mix_rate=None,
+        cfg_scale=3,
+        transform=None,
+        character_classes=None,
+        tokenizer=None,
+        text_encoder=None,
+        run_idx=None,
+    ):
+        model.eval()
+        cor_im = False
+        interpol = False
+        temp_loader = None
+        assert args.img_feat
+        assert len(labels) == 2
+        n = 1
+
+        if mix_rate is None:
+            mix_rate = args.mix_rate
+        if args.dataset == "iam":
+            temp_loader = IAM_TempLoader
+        temp_loader.check_preload()
+
+        with torch.no_grad():
+            n, text_features = self.get_text_embed(x_text, tokenizer)
+            text_features = text_features.to(args.device)
+
+            sc0 = []
+            sc1 = []
+            for i in range(n):
+                sc0.append(
+                    self.get_style_coll(
+                        labels[0].item(), transform, args, temp_loader, style_extractor
+                    )
+                )
+                sc1.append(
+                    self.get_style_coll(
+                        labels[1].item(), transform, args, temp_loader, style_extractor
+                    )
+                )
+            sf0 = torch.stack([x["features"] for x in sc0])
+            sf1 = torch.stack([x["features"] for x in sc1])
+            style_features = sf0 * mix_rate + sf1 * (1 - mix_rate)
+
+            #
+            x = self.get_initial_x(args, n, noise_scheduler, cor_im=False)
+
+            # scheduler
+            model_params = dict(
+                context=text_features,
+                original_images=None,
+                style_extractor=style_features,
+            )
+            x = self.update_schedule_x(args, n, x, noise_scheduler, model, model_params)
+
+        model.train()
+        return self.post_process_x(args, x, vae)

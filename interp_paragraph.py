@@ -39,46 +39,7 @@ def file_check(fname):
     raise RuntimeError(f"{fname} is not a file")
 
 
-def build_fake_interp(
-    word,
-    args,
-    diffusion,
-    ema_model,
-    vae,
-    feature_extractor,
-    ddim,
-    transform,
-    tokenizer,
-    text_encoder,
-):
-    # print("Word:", word)
-    writer_1 = args.writer_1
-    writer_2 = args.writer_2
-    mix_rate = args.mix_rate
-    labels = torch.tensor([writer_1, writer_2]).long().to(args.device)
-    ema_sampled_images = diffusion.interp_1(
-        ema_model,
-        vae,
-        x_text=word,
-        labels=labels,
-        args=args,
-        style_extractor=feature_extractor,
-        noise_scheduler=ddim,
-        transform=transform,
-        character_classes=None,
-        tokenizer=tokenizer,
-        text_encoder=text_encoder,
-        run_idx=None,
-    )
-    image = ema_sampled_images.squeeze(0)
-    im = torchvision.transforms.ToPILImage()(image)
-    im = im.convert("L")
-    im = crop_whitespace_width(im)
-    im = Image.fromarray(im)
-    return im
-
-
-def build_fakes(
+def build_fakes_interp(
     words,
     args,
     diffusion,
@@ -93,19 +54,31 @@ def build_fakes(
     max_word_length_width,
 ):
     fakes = []
-    for word in words:
-        im = build_fake_interp(
-            word,
-            args,
-            diffusion,
-            ema_model,
-            vae,
-            feature_extractor,
-            ddim,
-            transform,
-            tokenizer,
-            text_encoder,
-        )
+    writer_1 = args.writer_1
+    writer_2 = args.writer_2
+    labels = torch.tensor([writer_1, writer_2]).long().to(args.device)
+    ema_sampled_images = diffusion.interp_bulk(
+        ema_model,
+        vae,
+        x_text=words,
+        labels=labels,
+        args=args,
+        style_extractor=feature_extractor,
+        noise_scheduler=ddim,
+        transform=transform,
+        character_classes=None,
+        tokenizer=tokenizer,
+        text_encoder=text_encoder,
+        run_idx=None,
+    )
+    topil = torchvision.transforms.ToPILImage()
+    for i in range(len(words)):
+        word = words[i]
+        image = ema_sampled_images[i].squeeze(0)
+        im = topil(image)
+        im = im.convert("L")
+        im = crop_whitespace_width(im)
+        im = Image.fromarray(im)
         if len(word) == longest_word_length:
             max_word_length_width = im.width
         fakes.append(im)
@@ -261,7 +234,7 @@ def main():
     longest_word_length = max(len(word) for word in words)
 
     # build fake images
-    fakes, max_word_length_width = build_fakes(
+    fakes, max_word_length_width = build_fakes_interp(
         words,
         args=args,
         diffusion=diffusion,
