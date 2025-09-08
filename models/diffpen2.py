@@ -194,6 +194,21 @@ class Diffusion:
         style_coll["features"] = s_feat
         return style_coll
 
+    def get_text_embed(self, x_text, tokenizer, max_length=40):
+        n = 0
+        if isinstance(x_text, list):
+            n = len(x_text)
+        else:
+            n = 1
+        text_features = tokenizer(
+            x_text,
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
+            max_length=40,
+        )
+        return n, text_features
+
     def get_initial_x(self, args, n, noise_scheduler, cor_im=False):
         if args.latent:
             x = torch.randn((n, 4, self.img_size[0] // 8, self.img_size[1] // 8)).to(
@@ -431,6 +446,65 @@ class Diffusion:
             model_params = dict(
                 context=text_features,
                 original_images=style_images,
+                style_extractor=style_features,
+            )
+            x = self.update_schedule_x(args, n, x, noise_scheduler, model, model_params)
+
+        model.train()
+        return self.post_process_x(args, x, vae)
+
+    def sampling_bulk(
+        self,
+        model,
+        vae,
+        n,
+        x_text,
+        labels,
+        args,
+        style_extractor,
+        noise_scheduler,
+        mix_rate=None,
+        cfg_scale=3,
+        transform=None,
+        character_classes=None,
+        tokenizer=None,
+        text_encoder=None,
+        run_idx=None,
+    ):
+        model.eval()
+        cor_im = False
+        interpol = False
+        temp_loader = None
+        assert args.img_feat
+        assert n == 1
+        assert len(labels) == 1
+
+        if args.dataset == "iam":
+            temp_loader = IAM_TempLoader
+        temp_loader.check_preload()
+
+        with torch.no_grad():
+            n, text_features = self.get_text_embed(x_text, tokenizer)
+            text_features = text_features.to(args.device)
+
+            style_colls = []
+            for i in range(n):
+                style_colls.append(
+                    self.get_style_coll(
+                        label.item(), transform, args, temp_loader, style_extractor
+                    )
+                )
+            style_features = torch.stack([x["features"] for x in style_colls])
+
+            #
+            x = self.get_initial_x(args, n, noise_scheduler, cor_im=False)
+
+            # scheduler
+            model_params = dict(
+                context=text_features,
+                y=labels,
+                original_images=None,
+                mix_rate=mix_rate,
                 style_extractor=style_features,
             )
             x = self.update_schedule_x(args, n, x, noise_scheduler, model, model_params)
