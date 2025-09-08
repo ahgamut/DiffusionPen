@@ -331,55 +331,6 @@ class Diffusion:
         model.train()
         return self.post_process_x(args, x, vae)
 
-    def interp_0(
-        self,
-        model,
-        vae,
-        x_text,
-        labels,
-        args,
-        style_extractor,
-        noise_scheduler,
-        mix_rate=None,
-        cfg_scale=3,
-        transform=None,
-        character_classes=None,
-        tokenizer=None,
-        text_encoder=None,
-        run_idx=None,
-    ):
-        model.eval()
-        assert len(labels) == 2
-        n = 1
-        if mix_rate is None:
-            mix_rate = args.mix_rate
-
-        with torch.no_grad():
-            text_features = x_text
-            text_features = tokenizer(
-                text_features,
-                padding="max_length",
-                truncation=True,
-                return_tensors="pt",
-                max_length=40,
-            ).to(args.device)
-
-            x = self.get_initial_x(args, n, noise_scheduler)
-            model_params = dict(
-                s1=labels[0].item(),
-                s2=labels[1].item(),
-                interpolation=True,
-                mix_rate=args.mix_rate,
-                context=text_features,
-                original_images=None,
-                style_extractor=None,
-            )
-            # scheduler
-            x = self.update_schedule_x(args, n, x, noise_scheduler, model, model_params)
-
-        model.train()
-        return self.post_process_x(args, x, vae)
-
     def interp_1(
         self,
         model,
