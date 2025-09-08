@@ -284,8 +284,6 @@ class Diffusion:
         run_idx=None,
     ):
         model.eval()
-        cor_im = False
-        interpol = False
         temp_loader = None
 
         if args.dataset == "iam":
@@ -403,8 +401,6 @@ class Diffusion:
         assert len(labels) == 2
         n = 1
         temp_loader = None
-        cor_im = False
-        interpol = False
 
         if mix_rate is None:
             mix_rate = args.mix_rate
@@ -471,8 +467,6 @@ class Diffusion:
         run_idx=None,
     ):
         model.eval()
-        cor_im = False
-        interpol = False
         temp_loader = None
         assert args.img_feat
         assert len(labels) == 1
@@ -528,8 +522,6 @@ class Diffusion:
         run_idx=None,
     ):
         model.eval()
-        cor_im = False
-        interpol = False
         temp_loader = None
         assert args.img_feat
         assert len(labels) == 2

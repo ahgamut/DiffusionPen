@@ -17,8 +17,7 @@ from models.diffpen2 import Diffusion
 from utils.auxilary_functions import *
 from utils.generation import (
     setup_logging,
-    build_fake_image,
-    crop_whitespace_width,
+    build_fake_image_N,
     add_rescale_padding,
     build_paragraph_image,
 )
@@ -47,51 +46,6 @@ def range_check(x):
         raise RuntimeError(f"invalid range: {x}")
 
     return (l, u)
-
-
-def build_fakes(
-    words,
-    s,
-    args,
-    diffusion,
-    ema_model,
-    vae,
-    feature_extractor,
-    ddim,
-    transform,
-    tokenizer,
-    text_encoder,
-    longest_word_length,
-    max_word_length_width,
-):
-    labels = torch.tensor([s]).long().to(args.device)
-    ema_sampled_images = diffusion.sampling_bulk(
-        ema_model,
-        vae,
-        x_text=words,
-        labels=labels,
-        args=args,
-        style_extractor=feature_extractor,
-        noise_scheduler=ddim,
-        transform=transform,
-        character_classes=None,
-        tokenizer=tokenizer,
-        text_encoder=text_encoder,
-        run_idx=None,
-    )
-    fakes = []
-    topil = torchvision.transforms.ToPILImage()
-    for i in range(len(words)):
-        word = words[i]
-        image = ema_sampled_images[i].squeeze(0)
-        im = topil(image)
-        im = im.convert("L")
-        im = crop_whitespace_width(im)
-        im = Image.fromarray(im)
-        if len(word) == longest_word_length:
-            max_word_length_width = im.width
-        fakes.append(im)
-    return fakes, max_word_length_width
 
 
 def main():
@@ -235,7 +189,7 @@ def main():
     for s in range(writer_range[0], writer_range[1] + 1):
         try:
             # build fake images
-            fakes, max_word_length_width = build_fakes(
+            fakes, max_word_length_width = build_fake_image_N(
                 words,
                 s=s,
                 args=args,

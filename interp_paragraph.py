@@ -1,8 +1,6 @@
 import os
 import torch
 import torch.nn as nn
-import numpy as np
-from PIL import Image
 import torchvision
 from torch import optim
 import copy
@@ -18,8 +16,8 @@ from models.diffpen2 import Diffusion
 from utils.auxilary_functions import *
 from utils.generation import (
     setup_logging,
-    crop_whitespace_width,
     add_rescale_padding,
+    build_fake_interp_N,
     build_paragraph_image,
 )
 from utils.arghandle import add_common_args
@@ -37,52 +35,6 @@ def file_check(fname):
     if os.path.isfile(fname):
         return fname
     raise RuntimeError(f"{fname} is not a file")
-
-
-def build_fakes_interp(
-    words,
-    args,
-    diffusion,
-    ema_model,
-    vae,
-    feature_extractor,
-    ddim,
-    transform,
-    tokenizer,
-    text_encoder,
-    longest_word_length,
-    max_word_length_width,
-):
-    fakes = []
-    writer_1 = args.writer_1
-    writer_2 = args.writer_2
-    labels = torch.tensor([writer_1, writer_2]).long().to(args.device)
-    ema_sampled_images = diffusion.interp_bulk(
-        ema_model,
-        vae,
-        x_text=words,
-        labels=labels,
-        args=args,
-        style_extractor=feature_extractor,
-        noise_scheduler=ddim,
-        transform=transform,
-        character_classes=None,
-        tokenizer=tokenizer,
-        text_encoder=text_encoder,
-        run_idx=None,
-    )
-    topil = torchvision.transforms.ToPILImage()
-    for i in range(len(words)):
-        word = words[i]
-        image = ema_sampled_images[i].squeeze(0)
-        im = topil(image)
-        im = im.convert("L")
-        im = crop_whitespace_width(im)
-        im = Image.fromarray(im)
-        if len(word) == longest_word_length:
-            max_word_length_width = im.width
-        fakes.append(im)
-    return fakes, max_word_length_width
 
 
 def main():
@@ -227,7 +179,7 @@ def main():
     longest_word_length = max(len(word) for word in words)
 
     # build fake images
-    fakes, max_word_length_width = build_fakes_interp(
+    fakes, max_word_length_width = build_fake_interp_N(
         words,
         args=args,
         diffusion=diffusion,

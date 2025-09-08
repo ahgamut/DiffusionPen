@@ -1,6 +1,5 @@
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import unescape as _unescape
-import argparse
 import re
 from PIL import Image, ImageDraw
 

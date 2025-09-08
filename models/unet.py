@@ -8,7 +8,6 @@ from torch import einsum
 from einops import rearrange, repeat
 from inspect import isfunction
 import math
-import random
 
 
 def checkpoint(func, inputs, params, flag):

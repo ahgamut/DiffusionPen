@@ -13,7 +13,7 @@ from diffusers import AutoencoderKL, DDIMScheduler
 from torch.nn import DataParallel
 from torchvision import transforms
 from transformers import CanineModel, CanineTokenizer
-from PIL import Image, ImageDraw
+from PIL import Image
 
 #
 from models import UNetModel, ImageEncoder
@@ -21,8 +21,7 @@ from models.diffpen2 import Diffusion, IAM_TempLoader
 from utils.auxilary_functions import *
 from utils.generation import (
     setup_logging,
-    build_fake_image,
-    crop_whitespace_width,
+    build_fake_image_N,
     add_rescale_padding,
     build_paragraph_image,
 )
@@ -57,51 +56,6 @@ def build_ref_paragraph(fakes, xpr, max_line_width, longest_word_length):
 
     dupe = dupe.convert("L")
     return xpr.get_cropped(dupe)
-
-
-def build_fakes(
-    words,
-    s,
-    args,
-    diffusion,
-    ema_model,
-    vae,
-    feature_extractor,
-    ddim,
-    transform,
-    tokenizer,
-    text_encoder,
-    longest_word_length,
-    max_word_length_width,
-):
-    labels = torch.tensor([s]).long().to(args.device)
-    ema_sampled_images = diffusion.sampling_bulk(
-        ema_model,
-        vae,
-        x_text=words,
-        labels=labels,
-        args=args,
-        style_extractor=feature_extractor,
-        noise_scheduler=ddim,
-        transform=transform,
-        character_classes=None,
-        tokenizer=tokenizer,
-        text_encoder=text_encoder,
-        run_idx=None,
-    )
-    fakes = []
-    topil = torchvision.transforms.ToPILImage()
-    for i in range(len(words)):
-        word = words[i]
-        image = ema_sampled_images[i].squeeze(0)
-        im = topil(image)
-        im = im.convert("L")
-        im = crop_whitespace_width(im)
-        im = Image.fromarray(im)
-        if len(word) == longest_word_length:
-            max_word_length_width = im.width
-        fakes.append(im)
-    return fakes, max_word_length_width
 
 
 def load_prompt(coll):
@@ -275,7 +229,7 @@ def main():
             max_word_length_width = 0
             longest_word_length = max(len(word) for word in words)
 
-            fakes, max_word_length_width = build_fakes(
+            fakes, max_word_length_width = build_fake_image_N(
                 words,
                 s,
                 args=args,
@@ -311,7 +265,7 @@ def main():
             fakes = []
             max_word_length_width = 0
             longest_word_length = max(len(word) for word in words)
-            fakes, max_word_length_width = build_fakes(
+            fakes, max_word_length_width = build_fake_image_N(
                 words,
                 s,
                 args=args,
