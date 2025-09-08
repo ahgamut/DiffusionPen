@@ -18,6 +18,7 @@ from utils.auxilary_functions import *
 from utils.generation import (
     setup_logging,
     build_fake_image,
+    crop_whitespace_width,
     add_rescale_padding,
     build_paragraph_image,
 )
@@ -63,21 +64,29 @@ def build_fakes(
     longest_word_length,
     max_word_length_width,
 ):
+    labels = torch.tensor([writer_id]).long().to(args.device)
+    ema_sampled_images = diffusion.sampling(
+        ema_model,
+        vae,
+        x_text=words,
+        labels=labels,
+        args=args,
+        style_extractor=feature_extractor,
+        noise_scheduler=ddim,
+        transform=transform,
+        character_classes=None,
+        tokenizer=tokenizer,
+        text_encoder=text_encoder,
+        run_idx=None,
+    )
     fakes = []
-    for word in words:
-        im = build_fake_image(
-            word,
-            s,
-            args,
-            diffusion,
-            ema_model,
-            vae,
-            feature_extractor,
-            ddim,
-            transform,
-            tokenizer,
-            text_encoder,
-        )
+    topil = torchvision.transforms.ToPILImage()
+    for i in range(len(words)):
+        image = ema_sampled_images[i].squeeze(0)
+        im = topil(image)
+        im = im.convert("L")
+        im = crop_whitespace_width(im)
+        im = Image.fromarray(im)
         if len(word) == longest_word_length:
             max_word_length_width = im.width
         fakes.append(im)

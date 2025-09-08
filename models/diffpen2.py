@@ -457,7 +457,6 @@ class Diffusion:
         self,
         model,
         vae,
-        n,
         x_text,
         labels,
         args,
