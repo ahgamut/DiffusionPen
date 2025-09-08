@@ -28,7 +28,7 @@ def main():
     parser.add_argument("-o", "--output", default="./output.png", help="output")
 
     args = parser.parse_args()
-    print("torch version", torch.__version__)
+    print(__file__, "with torch", torch.__version__)
 
     # create save directories
     setup_logging(args)
@@ -47,11 +47,9 @@ def main():
     ######################### MODEL #######################################
     vocab_size = len(character_classes)
     style_classes = 339  # for IAM Dataset
-    print("Vocab size: ", vocab_size)
 
     if args.dataparallel == True:
         device_ids = [3, 4]
-        print("using dataparallel with device:", device_ids)
     else:
         idx = int("".join(filter(str.isdigit, args.device)))
         device_ids = [idx]
@@ -81,9 +79,6 @@ def main():
     unet = DataParallel(unet, device_ids=device_ids)
     unet = unet.to(args.device)
 
-    # print('unet parameters')
-    # print('unet', sum(p.numel() for p in unet.parameters() if p.requires_grad))
-
     optimizer = optim.AdamW(unet.parameters(), lr=0.0001)
 
     diffusion = Diffusion(img_size=args.img_size, args=args)
@@ -102,10 +97,8 @@ def main():
         ema_model.load_state_dict(
             torch.load(f"{args.save_path}/models/ema_ckpt.pt", weights_only=True)
         )
-        print("Loaded models and optimizer")
 
     if args.latent == True:
-        print("VAE is true")
         vae = AutoencoderKL.from_pretrained(args.stable_dif_path, subfolder="vae")
         vae = DataParallel(vae, device_ids=device_ids)
         vae = vae.to(args.device)
@@ -137,8 +130,6 @@ def main():
     feature_extractor.requires_grad_(False)
     feature_extractor.eval()
 
-    print("Sampling started....")
-
     unet.load_state_dict(
         torch.load(
             f"{args.save_path}/models/ckpt.pt",
@@ -146,7 +137,6 @@ def main():
             weights_only=True,
         )
     )
-    print("unet loaded")
     unet.eval()
 
     ema_model = copy.deepcopy(unet).eval().requires_grad_(False)

@@ -100,7 +100,7 @@ def main():
 
     args = parser.parse_args()
     assert args.mix_rate is not None
-    print("torch version", torch.__version__)
+    print(__file__, "with torch", torch.__version__)
 
     # create save directories
     setup_logging(args)
@@ -119,11 +119,9 @@ def main():
     ######################### MODEL #######################################
     vocab_size = len(character_classes)
     style_classes = 339  # for IAM Dataset
-    print("Vocab size: ", vocab_size)
 
     if args.dataparallel == True:
         device_ids = [3, 4]
-        print("using dataparallel with device:", device_ids)
     else:
         idx = int("".join(filter(str.isdigit, args.device)))
         device_ids = [idx]
@@ -167,10 +165,8 @@ def main():
         ema_model.load_state_dict(
             torch.load(f"{args.save_path}/models/ema_ckpt.pt", weights_only=True)
         )
-        print("Loaded models and optimizer")
 
     if args.latent == True:
-        print("VAE is true")
         vae = AutoencoderKL.from_pretrained(args.stable_dif_path, subfolder="vae")
         vae = DataParallel(vae, device_ids=device_ids)
         vae = vae.to(args.device)
@@ -203,7 +199,6 @@ def main():
     feature_extractor.requires_grad_(False)
     feature_extractor.eval()
 
-    print("Sampling started....")
     unet.load_state_dict(
         torch.load(
             f"{args.save_path}/models/ckpt.pt",
@@ -211,7 +206,6 @@ def main():
             weights_only=True,
         )
     )
-    print("unet loaded")
     unet.eval()
 
     ema_model = copy.deepcopy(unet).eval().requires_grad_(False)
@@ -224,7 +218,6 @@ def main():
     )
     ema_model.eval()
 
-    print("Sampling paragraph")
     # make the code to generate lines
     lines = open(args.text_file).read()
     words = lines.strip().split(" ")
