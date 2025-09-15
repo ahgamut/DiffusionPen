@@ -4,7 +4,6 @@ from torch.nn.functional import cross_entropy
 from torch.nn import DataParallel
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
-from tqdm import tqdm
 from transformers import CanineModel, CanineTokenizer
 import argparse
 import copy
@@ -19,9 +18,7 @@ import torchvision
 
 #
 from models import UNetModel, ImageEncoder, EMA, Diffusion, HorizontalPlacer
-from utils.cvl_dataset import CVLDataset
-from utils.iam_dataset import IAMDataset
-from utils.GNHK_dataset import GNHK_Dataset
+from utils.placer_iam import IAMPlacerDataset
 from utils.auxilary_functions import *
 from utils.generation import save_image_grid, setup_logging
 from utils.arghandle import add_common_args
@@ -32,8 +29,17 @@ def frz(model):
     model.requires_grad_(False)
 
 
-def build_IAMDataset(args):
-    pass
+def build_IAMDataset(args, train_transform):
+    full_data = IAMPlacerDataset(transforms=train_transform)
+    style_classes = full_data.STYLE_CLASSES
+
+    train_size = int(0.8) * len(full_data)
+    test_size = len(full_data) - train_size
+    train_data, test_data = random_split(
+        train_data, [train_size, test_size], generator=torch.Generator().manual_seed(42)
+    )
+
+    return train_data, test_data, style_classes
 
 
 def load_style_weights(model, device, style_path):
@@ -55,6 +61,148 @@ def load_style_weights(model, device, style_path):
     print("Pretrained style model loaded")
 
 
+def train_epoch(
+    placer, diffusion, vae, optimizer, train_loader, mse_loss, loss_meter, args
+):
+    placer.train()
+    for i, data in enumerate(train_loader):
+        wids = data[0].to(args.device)
+        x_cur = data[1]
+        x_next = data[2]
+        shifts = data[3].to(args.device)
+
+        x_cur["image"] = x_cur["image"].to(args.device)
+        x_cur["text_features"] = tokenizer(
+            x_cur["text"],
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
+            max_length=40,
+        ).to(args.device)
+        #
+        x_next["image"] = x_next["image"].to(args.device)
+        x_next["text_features"] = tokenizer(
+            x_next["text"],
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
+            max_length=40,
+        ).to(args.device)
+
+        if np.random.random() < 0.1:
+            # try with reconstructions?
+            labels = None
+
+        predicted_shifts = placer(x_cur, x_next)
+        loss = mse_loss(shifts, predicted_shifts)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        count = x_cur["image"].size(0)
+        loss_meter.update(loss.item(), count)
+    print("train", repr(loss_meter))
+
+
+def val_epoch(placer, diffusion, vae, val_loader, mse_loss, loss_meter, args):
+    placer.eval()
+    for i, data in enumerate(val_loader):
+        wids = data[0].to(args.device)
+        x_cur = data[1]
+        x_next = data[2]
+        shifts = data[3].to(args.device)
+
+        x_cur["image"] = x_cur["image"].to(args.device)
+        x_cur["text_features"] = tokenizer(
+            x_cur["text"],
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
+            max_length=40,
+        ).to(args.device)
+        #
+        x_next["image"] = x_next["image"].to(args.device)
+        x_next["text_features"] = tokenizer(
+            x_next["text"],
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
+            max_length=40,
+        ).to(args.device)
+
+        if np.random.random() < 0.1:
+            # try with reconstructions?
+            labels = None
+
+        predicted_shifts = placer(x_cur, x_next)
+        loss = mse_loss(shifts, predicted_shifts)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        count = x_cur["image"].size(0)
+        loss_meter.update(loss.item(), count)
+    print("validation", repr(loss_meter))
+
+
+def train(
+    placer,
+    diffusion,
+    model,
+    ema,
+    ema_model,
+    vae,
+    optimizer,
+    mse_loss,
+    train_loader,
+    test_loader,
+    num_classes,
+    style_extractor,
+    vocab_size,
+    noise_scheduler,
+    transforms,
+    args,
+    tokenizer=None,
+    text_encoder=None,
+    lr_scheduler=None,
+):
+    model.train()
+    loss_meter = AvgMeter("MSE")
+    print("Training started....")
+
+    for epoch in range(args.epochs):
+        print("Epoch:", epoch)
+        train_epoch(
+            placer=placer,
+            diffusion=diffusion,
+            vae=vae,
+            optimizer=optimizer,
+            train_loader=train_loader,
+            mse_loss=mse_loss,
+            loss_meter=loss_meter,
+            args=args,
+        )
+
+        if epoch % 10 == 0:
+            val_epoch(
+                placer=placer,
+                diffusion=diffusion,
+                vae=vae,
+                val_loader=val_loader,
+                mse_loss=mse_loss,
+                loss_meter=loss_meter,
+                args=args,
+            )
+            torch.save(
+                placer.state_dict(),
+                os.path.join(args.save_path, "models", "placer_ckpt.pt"),
+            )
+            torch.save(
+                optimizer.state_dict(),
+                os.path.join(args.save_path, "models", "placer_optim.pt"),
+            )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=1000)
@@ -65,9 +213,18 @@ def main():
     args = parser.parse_args()
     setup_logging(args)
     #
+    train_transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize(
+                (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
+            ),  # transforms.Normalize((0.5,), (0.5,)),  #
+        ]
+    )
+    #
     if args.dataset == "iam":
         print("loading IAM")
-        train_data, test_data, style_classes = build_IAMDataset(args)
+        train_data, test_data, style_classes = build_IAMDataset(args, train_transform)
 
     else:
         raise ValueError("unknown dataset!")
@@ -123,7 +280,6 @@ def main():
     unet = DataParallel(unet, device_ids=device_ids)
     unet = unet.to(args.device)
 
-    optimizer = optim.AdamW(unet.parameters(), lr=0.0001)
     lr_scheduler = None
 
     mse_loss = nn.MSELoss()
@@ -137,13 +293,9 @@ def main():
         unet.load_state_dict(
             torch.load(f"{args.save_path}/models/ckpt.pt", weights_only=True)
         )
-        optimizer.load_state_dict(
-            torch.load(f"{args.save_path}/models/optim.pt", weights_only=True)
-        )
         ema_model.load_state_dict(
             torch.load(f"{args.save_path}/models/ema_ckpt.pt", weights_only=True)
         )
-        print("Loaded models and optimizer")
 
     if args.latent == True:
         print("VAE is true")
@@ -175,9 +327,16 @@ def main():
     placer = HorizontalPlacer(
         text_encoder=text_encoder, style_encoder=feature_extractor
     )
+    optimizer = optim.AdamW(placer.parameters(), lr=0.0001)
     placer_wts_path = f"{args.save_path}/models/placer_ckpt.pt"
     if os.path.isfile(placer_wts_path):
         placer.load_state_dict(torch.load(placer_wts_path, weights_only=True))
+
+    placer_wts_path = f"{args.save_path}/models/placer_optim.pt"
+    if os.path.isfile(placer_optim_path):
+        optimizer.load_state_dict(torch.load(placer_optim_path, weights_only=True))
+    placer = DataParallel(placer, device_ids=device_ids)
+    placer = placer.to(args.device)
 
     ## freeze everyone except the placer model
     frz(tokenizer)
@@ -186,6 +345,29 @@ def main():
     frz(text_encoder)
     frz(feature_extractor)
     frz(ema_model)
+
+    #
+    train(
+        placer=placer,
+        diffusion=diffusion,
+        model=unet,
+        ema=ema,
+        ema_model=ema_model,
+        vae=vae,
+        optimizer=optimizer,
+        mse_loss=mse_loss,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        num_classes=style_classes,
+        style_extractor=feature_extractor,
+        vocab_size=vocab_size,
+        noise_scheduler=ddim,
+        transforms=train_transform,
+        args=args,
+        tokenizer=tokenizer,
+        text_encoder=text_encoder,
+        lr_scheduler=None,
+    )
 
 
 if __name__ == "__main__":
