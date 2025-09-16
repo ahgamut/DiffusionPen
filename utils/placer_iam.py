@@ -22,7 +22,7 @@ RelWordInfo = namedtuple("RelWordInfo", "cur_index next_index diff_x diff_y cur_
 
 def rwi_to_struct(rwi):
     raw = struct.pack(
-        "<I<I<i<i<I",
+        "IIiiI",
         rwi.cur_index,
         rwi.next_index,
         rwi.diff_x,
@@ -33,7 +33,7 @@ def rwi_to_struct(rwi):
 
 
 def struct_to_rwi(raw):
-    rwi = RelWordInfo(*struct.unpack("<I<I<i<i<I", raw))
+    rwi = RelWordInfo(*struct.unpack("IIiiI", raw))
     return rwi
 
 
@@ -69,7 +69,7 @@ def get_wimg_crop(word, img, resize=True, encode=True):
     else:
         rszd = orig
     if encode:
-        rszd = rszd.tobytes(decoder_name="raw")
+        rszd = rszd.tobytes()
     return rszd
 
 
@@ -124,21 +124,22 @@ class IAMPlacerDataset(Dataset):
     def __len__(self):
         return self.num_pairs
 
-    def read_image(self, img_id):
-        img = read_iam_image(img_id)
-        return iam_resizefix(img)
+    def read_image(self, index):
+        raw = self.wimgs[index]
+        img = Image.frombytes(mode="RGB", size=(256, 64), data=raw)
+        return img
 
     def __getitem__(self, index):
         rwi = struct_to_rwi(self.word_pairs[index])
         wid = self.wids[rwi.cur_index]
         cur_word = self.words[rwi.cur_index]
-        next_word = self.word[rwi.next_index]
+        next_word = self.words[rwi.next_index]
         diff_x = rwi.diff_x
         diff_y = rwi.diff_y
         cur_height = rwi.cur_height
 
-        x_cur = {"image": Image.frombytes(self.wimgs[cur_index]), "text": cur_word}
-        x_next = {"image": Image.frombytes(self.wimgs[next_index]), "text": next_word}
+        x_cur = {"image": self.read_image(rwi.cur_index), "text": cur_word}
+        x_next = {"image": self.read_image(rwi.next_index), "text": next_word}
         diff_tens = torch.tensor(
             [diff_x / cur_height, diff_y / cur_height],
             dtype=torch.float32,
