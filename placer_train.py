@@ -142,9 +142,6 @@ def val_epoch(
 
         predicted_shifts = placer(x_cur, x_next)
         loss = mse_loss(shifts, predicted_shifts)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
 
         count = x_cur["image"].size(0)
         loss_meter.update(loss.item(), count)
