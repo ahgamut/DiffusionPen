@@ -6,6 +6,8 @@ import glob
 import json
 import string
 from torch.utils.data import Dataset
+import struct
+from collections import namedtuple
 
 #
 from utils.auxilary_functions import (
@@ -13,6 +15,26 @@ from utils.auxilary_functions import (
     centered_PIL,
 )
 from utils.subprompt import Prompt, Word
+
+#
+RelWordInfo = namedtuple("RelWordInfo", "cur_index next_index diff_x diff_y cur_height")
+
+
+def rwi_to_struct(rwi):
+    raw = struct.pack(
+        "<I<I<i<i<I",
+        rwi.cur_index,
+        rwi.next_index,
+        rwi.diff_x,
+        rwi.diff_y,
+        rwi.cur_height,
+    )
+    return raw
+
+
+def struct_to_rwi(raw):
+    rwi = RelWordInfo(*struct.unpack("<I<I<i<i<I", raw))
+    return rwi
 
 
 def line_of_word(word):
@@ -40,16 +62,15 @@ def iam_resizefix(img_s):
     return img_s
 
 
-def get_word_data(word, img):
+def get_wimg_crop(word, img, resize=True, encode=True):
     orig = img.crop((word.x_start, word.y_start, word.x_end, word.y_end))
-    rsz = iam_resizefix(orig)
-    wraw = word.raw
-
-    orig = np.array(orig, dtype=np.float32)
-    rsz = np.array(rsz, dtype=np.float32)
-    res = {"text": wraw, "image": rsz}
-    # res["orig"] = orig
-    return res
+    if resize:
+        rszd = iam_resizefix(orig)
+    else:
+        rszd = orig
+    if encode:
+        rszd = rszd.tobytes(decoder_name="raw")
+    return rszd
 
 
 def read_iam_image(img_id):
@@ -61,42 +82,30 @@ def read_iam_image(img_id):
     return img
 
 
-def get_spacing_pairs(prompt, img):
-    result = []
+def get_spacing_info(prompt, img, ind_start):
+    pairs = []
+    wids = [prompt.writer_id for w in prompt.words]
+    words = [w.raw for w in prompt.words]
+    wimgs = [get_wimg_crop(w, img) for w in prompt.words]
     for i in range(len(prompt.words) - 1):
         cur_word = prompt.words[i]
         next_word = prompt.words[i + 1]
         if line_of_word(cur_word) != line_of_word(next_word):
             continue
 
-        try:
-            cur_img = read_iam_image(cur_word.id)
-            next_img = read_iam_image(next_word.id)
-        except Exception as e:
-            print("failed to read word image", e)
-
-        # can add a check here for dupes
-        cur_data = (cur_word.x_start, cur_word.y_start, cur_word.x_end, cur_word.y_end)
-        next_data = (
-            next_word.x_start,
-            next_word.y_start,
-            next_word.x_end,
-            next_word.y_end,
-        )
-
+        cur_index = ind_start + i
+        next_index = ind_start + i + 1
         diff_x = next_word.x_start - cur_word.x_end
         diff_y = next_word.y_start - cur_word.y_end
-        coeffs = {
-            "writer_id": prompt.writer_id,
-            "cur_id": cur_word.id,
-            "next_id": next_word.id,
-            "cur_word": cur_word.raw,
-            "next_word": next_word.raw,
-            "cur_height": cur_word.height,
-            "diff_x": diff_x,
-            "diff_y": diff_y,
-        }
-        result.append(coeffs)
+        cur_height = cur_word.height
+        rwi = RelWordInfo(cur_index, next_index, diff_x, diff_y, cur_height)
+        pairs.append(rwi_to_struct(rwi))
+
+    result = dict()
+    result["wids"] = wids
+    result["words"] = words
+    result["wimgs"] = wimgs
+    result["pairs"] = pairs
     return result
 
 
@@ -120,17 +129,16 @@ class IAMPlacerDataset(Dataset):
         return iam_resizefix(img)
 
     def __getitem__(self, index):
-        wid = self.word_pairs["writer_id"][index]
-        cur_word = self.word_pairs["cur_word"][index]
-        next_word = self.word_pairs["next_word"][index]
-        cur_id = self.word_pairs["cur_id"][index]
-        next_id = self.word_pairs["next_id"][index]
-        diff_x = self.word_pairs["diff_x"][index]
-        diff_y = self.word_pairs["diff_y"][index]
-        cur_height = self.word_pairs["cur_height"][index]
+        rwi = struct_to_rwi(self.word_pairs[index])
+        wid = self.wids[rwi.cur_index]
+        cur_word = self.words[rwi.cur_index]
+        next_word = self.word[rwi.next_index]
+        diff_x = rwi.diff_x
+        diff_y = rwi.diff_y
+        cur_height = rwi.cur_height
 
-        x_cur = {"image": self.read_image(cur_id), "text": cur_word}
-        x_next = {"image": self.read_image(next_id), "text": next_word}
+        x_cur = {"image": Image.frombytes(self.wimgs[cur_index]), "text": cur_word}
+        x_next = {"image": Image.frombytes(self.wimgs[next_index]), "text": next_word}
         diff_tens = torch.tensor(
             [diff_x / cur_height, diff_y / cur_height],
             dtype=torch.float32,
@@ -166,8 +174,11 @@ class IAMPlacerDataset(Dataset):
             raw = self.main_loader()
             torch.save(raw, save_file)
 
-        self.word_pairs = raw
-        self.num_pairs = len(self.word_pairs["cur_word"])
+        self.wids = raw["wids"]
+        self.word_pairs = raw["pairs"]
+        self.wimgs = raw["wimgs"]
+        self.words = raw["words"]
+        self.num_pairs = len(self.word_pairs)
         print(f"dataset has {self.num_pairs} pairs")
 
     def main_loader(self):
@@ -176,27 +187,23 @@ class IAMPlacerDataset(Dataset):
         img_folder = os.path.join(self.basefolder, "forms")
 
         res_keys = [
-            "cur_word",
-            "cur_id",
-            "next_word",
-            "next_id",
-            "writer_id",
-            "diff_x",
-            "diff_y",
-            "cur_height",
+            "wids",
+            "words",
+            "wimgs",
+            "pairs",
         ]
         for k in res_keys:
             result[k] = []
         for fname in xml_files:
-            print(len(result["cur_word"]))
+            print(len(result["pairs"]))
             try:
                 prompt = Prompt(fname)
                 img = Image.open(os.path.join(img_folder, f"{prompt.id}.png"))
                 img = img.convert("RGB")
-                tmp = get_spacing_pairs(prompt, img)
-                for x in tmp:
-                    for k in res_keys:
-                        result[k].append(x[k])
+                tmp = get_spacing_info(prompt, img, len(result["pairs"]))
+                for k in res_keys:
+                    for x in tmp[k]:
+                        result[k].append(x)
             except Exception as e:
                 print(f"failed with {fname}", e)
         return result
