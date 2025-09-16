@@ -85,6 +85,7 @@ def build_fakes_interp(
         fakes.append(im)
     return fakes, max_word_length_width
 
+
 def combine_stack(images):
     res_width = max(img.width for img in images) + 10
     res_height = sum(img.height + 10 for img in images)
@@ -95,6 +96,7 @@ def combine_stack(images):
         ch += img.height
         ch += 5
     return dst
+
 
 def main():
     """Main function"""
@@ -239,9 +241,9 @@ def main():
     wt_pieces = np.arange(1.00, -0.001, -base_wt)
     big_images = []
 
-    for i in range(len(writers)-1):
+    for i in range(len(writers) - 1):
         args.writer_1 = writers[i]
-        args.writer_2 = writers[i+1]
+        args.writer_2 = writers[i + 1]
         for wt in wt_pieces:
             if (wt == 1) and i != 0:
                 continue

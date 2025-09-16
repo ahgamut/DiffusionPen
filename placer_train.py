@@ -17,7 +17,7 @@ import torch.optim as optim
 import torchvision
 
 #
-from models import UNetModel, ImageEncoder, EMA, Diffusion, HorizontalPlacer
+from models import UNetModel, ImageEncoder, EMA, Diffusion, HorizontalPlacer, AvgMeter
 from utils.placer_iam import IAMPlacerDataset
 from utils.auxilary_functions import *
 from utils.generation import save_image_grid, setup_logging
@@ -33,10 +33,10 @@ def build_IAMDataset(args, train_transform):
     full_data = IAMPlacerDataset(transforms=train_transform)
     style_classes = full_data.STYLE_CLASSES
 
-    train_size = int(0.8) * len(full_data)
+    train_size = int(0.8 * len(full_data))
     test_size = len(full_data) - train_size
     train_data, test_data = random_split(
-        train_data, [train_size, test_size], generator=torch.Generator().manual_seed(42)
+        full_data, [train_size, test_size], generator=torch.Generator().manual_seed(42)
     )
 
     return train_data, test_data, style_classes
@@ -62,11 +62,19 @@ def load_style_weights(model, device, style_path):
 
 
 def train_epoch(
-    placer, diffusion, vae, optimizer, train_loader, mse_loss, loss_meter, args
+    placer,
+    diffusion,
+    tokenizer,
+    vae,
+    optimizer,
+    train_loader,
+    mse_loss,
+    loss_meter,
+    args,
 ):
     placer.train()
     for i, data in enumerate(train_loader):
-        wids = data[0].to(args.device)
+        wids = data[0]  # .to(args.device)
         x_cur = data[1]
         x_next = data[2]
         shifts = data[3].to(args.device)
@@ -104,10 +112,12 @@ def train_epoch(
     print("train", repr(loss_meter))
 
 
-def val_epoch(placer, diffusion, vae, val_loader, mse_loss, loss_meter, args):
+def val_epoch(
+    placer, diffusion, tokenizer, vae, test_loader, mse_loss, loss_meter, args
+):
     placer.eval()
-    for i, data in enumerate(val_loader):
-        wids = data[0].to(args.device)
+    for i, data in enumerate(test_loader):
+        wids = data[0]  # .to(args.device)
         x_cur = data[1]
         x_next = data[2]
         shifts = data[3].to(args.device)
@@ -175,6 +185,7 @@ def train(
         train_epoch(
             placer=placer,
             diffusion=diffusion,
+            tokenizer=tokenizer,
             vae=vae,
             optimizer=optimizer,
             train_loader=train_loader,
@@ -187,8 +198,9 @@ def train(
             val_epoch(
                 placer=placer,
                 diffusion=diffusion,
+                tokenizer=tokenizer,
                 vae=vae,
-                val_loader=val_loader,
+                test_loader=test_loader,
                 mse_loss=mse_loss,
                 loss_meter=loss_meter,
                 args=args,
@@ -229,6 +241,7 @@ def main():
     else:
         raise ValueError("unknown dataset!")
 
+    print(len(train_data))
     train_loader = DataLoader(
         train_data,
         batch_size=args.batch_size,
@@ -332,14 +345,13 @@ def main():
     if os.path.isfile(placer_wts_path):
         placer.load_state_dict(torch.load(placer_wts_path, weights_only=True))
 
-    placer_wts_path = f"{args.save_path}/models/placer_optim.pt"
+    placer_optim_path = f"{args.save_path}/models/placer_optim.pt"
     if os.path.isfile(placer_optim_path):
         optimizer.load_state_dict(torch.load(placer_optim_path, weights_only=True))
     placer = DataParallel(placer, device_ids=device_ids)
     placer = placer.to(args.device)
 
     ## freeze everyone except the placer model
-    frz(tokenizer)
     frz(unet)
     frz(vae)
     frz(text_encoder)
@@ -357,7 +369,7 @@ def main():
         optimizer=optimizer,
         mse_loss=mse_loss,
         train_loader=train_loader,
-        val_loader=val_loader,
+        test_loader=test_loader,
         num_classes=style_classes,
         style_extractor=feature_extractor,
         vocab_size=vocab_size,

@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from PIL import Image, ImageOps
 import os
 import glob
@@ -14,7 +15,7 @@ from utils.auxilary_functions import (
 from utils.subprompt import Prompt, Word
 
 
-def get_line_of_word(word):
+def line_of_word(word):
     return word.id.split("-")[2]
 
 
@@ -41,12 +42,23 @@ def iam_resizefix(img_s):
 
 def get_word_data(word, img):
     orig = img.crop((word.x_start, word.y_start, word.x_end, word.y_end))
-    rsz = iam_resizefix(wimg)
+    rsz = iam_resizefix(orig)
     wraw = word.raw
 
     orig = np.array(orig, dtype=np.float32)
     rsz = np.array(rsz, dtype=np.float32)
-    return {"text": wraw, "orig": orig, "image": rsz}
+    res = {"text": wraw, "image": rsz}
+    # res["orig"] = orig
+    return res
+
+
+def read_iam_image(img_id):
+    splits = img_id.split("-")
+    p0 = splits[0]
+    p1 = "-".join(splits[:2])
+    path = os.path.join("./iam_data", "words", p0, p1, f"{img_id}.png")
+    img = Image.open(path).convert("RGB")
+    return img
 
 
 def get_spacing_pairs(prompt, img):
@@ -57,14 +69,34 @@ def get_spacing_pairs(prompt, img):
         if line_of_word(cur_word) != line_of_word(next_word):
             continue
 
+        try:
+            cur_img = read_iam_image(cur_word.id)
+            next_img = read_iam_image(next_word.id)
+        except Exception as e:
+            print("failed to read word image", e)
+
         # can add a check here for dupes
-        cur_data = get_word_data(cur_word, img)
-        next_data = get_word_data(next_word, img)
+        cur_data = (cur_word.x_start, cur_word.y_start, cur_word.x_end, cur_word.y_end)
+        next_data = (
+            next_word.x_start,
+            next_word.y_start,
+            next_word.x_end,
+            next_word.y_end,
+        )
 
         diff_x = next_word.x_start - cur_word.x_end
         diff_y = next_word.y_start - cur_word.y_end
-        diffs = {"cur_height": cur_word.height, "x": diff_x, "y": diff_y}
-        result.append((prompt.writer_id, cur_data, next_data, diffs))
+        coeffs = {
+            "writer_id": prompt.writer_id,
+            "cur_id": cur_word.id,
+            "next_id": next_word.id,
+            "cur_word": cur_word.raw,
+            "next_word": next_word.raw,
+            "cur_height": cur_word.height,
+            "diff_x": diff_x,
+            "diff_y": diff_y,
+        }
+        result.append(coeffs)
     return result
 
 
@@ -83,16 +115,31 @@ class IAMPlacerDataset(Dataset):
     def __len__(self):
         return self.num_pairs
 
+    def read_image(self, img_id):
+        img = read_iam_image(img_id)
+        return iam_resizefix(img)
+
     def __getitem__(self, index):
-        wid, x_cur, x_next, diffs = self.word_pairs[index]
-        if self.transforms is not None:
-            x_cur["image"] = self.transforms(x_cur["image"])
-            x_next["image"] = self.transforms(x_next["image"])
+        wid = self.word_pairs["writer_id"][index]
+        cur_word = self.word_pairs["cur_word"][index]
+        next_word = self.word_pairs["next_word"][index]
+        cur_id = self.word_pairs["cur_id"][index]
+        next_id = self.word_pairs["next_id"][index]
+        diff_x = self.word_pairs["diff_x"][index]
+        diff_y = self.word_pairs["diff_y"][index]
+        cur_height = self.word_pairs["cur_height"][index]
+
+        x_cur = {"image": self.read_image(cur_id), "text": cur_word}
+        x_next = {"image": self.read_image(next_id), "text": next_word}
         diff_tens = torch.tensor(
-            [diffs["x"] / diffs["height"], diffs["y"] / diffs["height"]],
+            [diff_x / cur_height, diff_y / cur_height],
             dtype=torch.float32,
             requires_grad=False,
         )
+
+        if self.transforms is not None:
+            x_cur["image"] = self.transforms(x_cur["image"])
+            x_next["image"] = self.transforms(x_next["image"])
         return wid, x_cur, x_next, diff_tens
 
     def collate_fn(self, batch):
@@ -116,23 +163,40 @@ class IAMPlacerDataset(Dataset):
             raw = torch.load(save_file, weights_only=False)  # unsafe, but just ndarrays
             print("loaded save file", save_file)
         else:
-            raw = self.main_loader(self.subset, self.segmentation_level)
+            raw = self.main_loader()
             torch.save(raw, save_file)
 
-        self.num_pairs = len(raw)
         self.word_pairs = raw
+        self.num_pairs = len(self.word_pairs["cur_word"])
         print(f"dataset has {self.num_pairs} pairs")
 
     def main_loader(self):
-        result = []
+        result = dict()
         xml_files = glob.glob(os.path.join(self.basefolder, "xml", "*.xml"))
         img_folder = os.path.join(self.basefolder, "forms")
+
+        res_keys = [
+            "cur_word",
+            "cur_id",
+            "next_word",
+            "next_id",
+            "writer_id",
+            "diff_x",
+            "diff_y",
+            "cur_height",
+        ]
+        for k in res_keys:
+            result[k] = []
         for fname in xml_files:
+            print(len(result["cur_word"]))
             try:
                 prompt = Prompt(fname)
                 img = Image.open(os.path.join(img_folder, f"{prompt.id}.png"))
                 img = img.convert("RGB")
-                result.append(get_spacing_pairs(prompt, img))
+                tmp = get_spacing_pairs(prompt, img)
+                for x in tmp:
+                    for k in res_keys:
+                        result[k].append(x[k])
             except Exception as e:
                 print(f"failed with {fname}", e)
         return result
