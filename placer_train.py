@@ -1,26 +1,22 @@
 from diffusers import AutoencoderKL, DDIMScheduler
 from torch import optim
-from torch.nn.functional import cross_entropy
 from torch.nn import DataParallel
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 from transformers import CanineModel, CanineTokenizer
 import argparse
 import copy
-import json
 import numpy as np
 import os
-import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torchvision
 
 #
 from models import UNetModel, ImageEncoder, EMA, Diffusion, HorizontalPlacer, AvgMeter
 from utils.placer_iam import IAMPlacerDataset
 from utils.auxilary_functions import *
-from utils.generation import save_image_grid, setup_logging
+from utils.generation import setup_logging
 from utils.arghandle import add_common_args
 
 
@@ -99,7 +95,7 @@ def train_epoch(
 
         if np.random.random() < 0.1:
             # try with reconstructions?
-            labels = None
+            pass
 
         predicted_shifts = placer(x_cur, x_next)
         loss = mse_loss(shifts, predicted_shifts)
@@ -142,7 +138,7 @@ def val_epoch(
 
         if np.random.random() < 0.1:
             # try with reconstructions?
-            labels = None
+            pass
 
         predicted_shifts = placer(x_cur, x_next)
         loss = mse_loss(shifts, predicted_shifts)
@@ -293,7 +289,6 @@ def main():
     unet = DataParallel(unet, device_ids=device_ids)
     unet = unet.to(args.device)
 
-    lr_scheduler = None
 
     mse_loss = nn.MSELoss()
     diffusion = Diffusion(img_size=args.img_size, args=args)

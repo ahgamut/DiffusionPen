@@ -1,10 +1,7 @@
-import numpy as np
 import torch
 from PIL import Image, ImageOps
 import os
 import glob
-import json
-import string
 from torch.utils.data import Dataset
 import struct
 from collections import namedtuple
@@ -14,7 +11,7 @@ from utils.auxilary_functions import (
     image_resize_PIL,
     centered_PIL,
 )
-from utils.subprompt import Prompt, Word
+from utils.subprompt import Prompt
 
 #
 RelWordInfo = namedtuple("RelWordInfo", "cur_index next_index diff_x diff_y cur_height")

@@ -1,12 +1,4 @@
-import math
-import numpy as np
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch import einsum
-from einops import rearrange, repeat
-from inspect import isfunction
-import math
 
 
 class HorizontalPlacer(nn.Module):
