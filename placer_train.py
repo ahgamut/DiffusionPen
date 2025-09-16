@@ -332,6 +332,7 @@ def main():
     placer = HorizontalPlacer(
         text_encoder=text_encoder, style_encoder=feature_extractor
     )
+    placer = DataParallel(placer, device_ids=device_ids)
     optimizer = optim.AdamW(placer.parameters(), lr=0.0001)
     placer_wts_path = f"{args.save_path}/models/placer_ckpt.pt"
     if os.path.isfile(placer_wts_path):
@@ -340,7 +341,6 @@ def main():
     placer_optim_path = f"{args.save_path}/models/placer_optim.pt"
     if os.path.isfile(placer_optim_path):
         optimizer.load_state_dict(torch.load(placer_optim_path, weights_only=True))
-    placer = DataParallel(placer, device_ids=device_ids)
     placer = placer.to(args.device)
 
     ## freeze everyone except the placer model
