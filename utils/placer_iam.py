@@ -87,7 +87,7 @@ def get_spacing_info(prompt, img, ind_start):
         cur_word = prompt.words[i]
         next_word = prompt.words[i + 1]
         assert cur_word.writer_id == next_word.writer_id
-        if cur_word.parent_line() != next_word.parent_line():
+        if cur_word.parent_line != next_word.parent_line:
             continue
 
         cur_index = ind_start + i
@@ -126,7 +126,7 @@ class IAMPlacerDataset(Dataset):
         rwi = self.word_pairs[index]
         cur_word = self.words[rwi.cur_index]
         next_word = self.words[rwi.next_index]
-        assert cur_word.writer_id == next_word.writer_id
+        # finalize has checked that wids are same
         wid = cur_word.writer_id
         diff_x = next_word.x_start - cur_word.x_end
         diff_y = next_word.y_start - cur_word.y_end
@@ -173,6 +173,21 @@ class IAMPlacerDataset(Dataset):
         self.wimgs = raw["wimgs"]
         self.words = [Word.from_bytes(x) for x in raw["words"]]
         self.num_pairs = len(self.word_pairs)
+        self.validate_pairs()
+
+    def validate_pairs(self):
+        err_fmt = "wids? {} != {} (index={} := ({}, {})"
+        for index, rwi in enumerate(self.word_pairs):
+            cur_word = self.words[rwi.cur_index]
+            next_word = self.words[rwi.next_index]
+            err_string = err_fmt.format(
+                cur_word.writer_id,
+                next_word.writer_id,
+                index,
+                rwi.cur_index,
+                rwi.next_index,
+            )
+            assert cur_word.writer_id == next_word.writer_id, err_string
         print(f"dataset has {self.num_pairs} pairs")
 
     def main_loader(self):
@@ -188,12 +203,12 @@ class IAMPlacerDataset(Dataset):
         for k in res_keys:
             result[k] = []
         for fname in xml_files:
-            print(len(result["pairs"]))
+            print(len(result["pairs"]), len(result["words"]))
             try:
                 prompt = Prompt(fname)
                 img = Image.open(os.path.join(img_folder, f"{prompt.idd}.png"))
                 img = img.convert("RGB")
-                tmp = get_spacing_info(prompt, img, len(result["pairs"]))
+                tmp = get_spacing_info(prompt, img, len(result["words"]))
                 for k in res_keys:
                     for x in tmp[k]:
                         result[k].append(x)

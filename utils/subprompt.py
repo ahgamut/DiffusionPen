@@ -52,6 +52,10 @@ class Word:
     def inline_index(self):
         return int(self.idd.split("-")[3])
 
+    @property
+    def writer_id(self):
+        return self.wid
+
     def __str__(self):
         return f'("{self.raw}", ({self.x_start}, {self.y_start}) -- ({self.x_end}, {self.y_end}))'
 
