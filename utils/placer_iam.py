@@ -138,7 +138,7 @@ class IAMPlacerDataset(Dataset):
         x_cur = {"image": self.read_image(rwi.cur_index), "text": cur_word}
         x_next = {"image": self.read_image(rwi.next_index), "text": next_word}
         diff_tens = torch.tensor(
-            [diff_x / cur_height, diff_y / cur_height],
+            [diff_y / cur_height],
             dtype=torch.float32,
             requires_grad=False,
         )

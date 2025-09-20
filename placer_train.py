@@ -64,7 +64,7 @@ def train_epoch(
     vae,
     optimizer,
     train_loader,
-    mse_loss,
+    loss_fn,
     loss_meter,
     args,
 ):
@@ -74,6 +74,8 @@ def train_epoch(
         x_cur = data[1]
         x_next = data[2]
         shifts = data[3].to(args.device)
+        # (Laplace CDF?) this ensures diffs are in [-1, 1]
+        # shifts = torch.sign(shifts) * (1 - torch.exp(-torch.abs(shifts)))
 
         x_cur["image"] = x_cur["image"].to(args.device)
         x_cur["text_features"] = tokenizer(
@@ -98,7 +100,7 @@ def train_epoch(
             pass
 
         predicted_shifts = placer(x_cur, x_next)
-        loss = mse_loss(shifts, predicted_shifts)
+        loss = loss_fn(shifts, predicted_shifts)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -109,7 +111,7 @@ def train_epoch(
 
 
 def val_epoch(
-    placer, diffusion, tokenizer, vae, test_loader, mse_loss, loss_meter, args
+    placer, diffusion, tokenizer, vae, test_loader, loss_fn, loss_meter, args
 ):
     placer.eval()
     for i, data in enumerate(test_loader):
@@ -117,6 +119,8 @@ def val_epoch(
         x_cur = data[1]
         x_next = data[2]
         shifts = data[3].to(args.device)
+        # (Laplace CDF?) this ensures diffs are in [-1, 1]
+        # shifts = torch.sign(shifts) * (1 - torch.exp(-torch.abs(shifts)))
 
         x_cur["image"] = x_cur["image"].to(args.device)
         x_cur["text_features"] = tokenizer(
@@ -141,7 +145,15 @@ def val_epoch(
             pass
 
         predicted_shifts = placer(x_cur, x_next)
-        loss = mse_loss(shifts, predicted_shifts)
+        loss = loss_fn(shifts, predicted_shifts)
+        err = torch.abs(shifts - predicted_shifts)
+        print(
+            torch.sum(err > 1).item(),
+            "pixels off by >1,",
+            torch.sum(err <= 1).item(),
+            "pixels off by <=1",
+        )
+        # print(shifts - predicted_shifts)
 
         count = x_cur["image"].size(0)
         loss_meter.update(loss.item(), count)
@@ -156,7 +168,7 @@ def train(
     ema_model,
     vae,
     optimizer,
-    mse_loss,
+    loss_fn,
     train_loader,
     test_loader,
     num_classes,
@@ -182,7 +194,7 @@ def train(
             vae=vae,
             optimizer=optimizer,
             train_loader=train_loader,
-            mse_loss=mse_loss,
+            loss_fn=loss_fn,
             loss_meter=loss_meter,
             args=args,
         )
@@ -194,7 +206,7 @@ def train(
                 tokenizer=tokenizer,
                 vae=vae,
                 test_loader=test_loader,
-                mse_loss=mse_loss,
+                loss_fn=loss_fn,
                 loss_meter=loss_meter,
                 args=args,
             )
@@ -206,6 +218,16 @@ def train(
                 optimizer.state_dict(),
                 os.path.join(args.save_path, "models", "placer_optim.pt"),
             )
+
+
+def custom_loss(out=1.0, alpha=0.5, beta=2.0):
+    def fn(pred, target):
+        l2 = nn.functional.mse_loss(pred, target, reduction="none")
+        small = alpha * l2[l2 <= out].sum()
+        big = beta * l2[l2 > out].sum()
+        return big + small
+
+    return fn
 
 
 def main():
@@ -286,8 +308,7 @@ def main():
     unet = DataParallel(unet, device_ids=device_ids)
     unet = unet.to(args.device)
 
-
-    mse_loss = nn.MSELoss()
+    loss_fn = custom_loss(1.0, alpha=0.5, beta=5.0)
     diffusion = Diffusion(img_size=args.img_size, args=args)
 
     ema = EMA(0.995)
@@ -333,7 +354,7 @@ def main():
         text_encoder=text_encoder, style_encoder=feature_extractor
     )
     placer = DataParallel(placer, device_ids=device_ids)
-    optimizer = optim.AdamW(placer.parameters(), lr=0.0001)
+    optimizer = optim.AdamW(placer.parameters(), lr=0.001)
     placer_wts_path = f"{args.save_path}/models/placer_ckpt.pt"
     if os.path.isfile(placer_wts_path):
         placer.load_state_dict(torch.load(placer_wts_path, weights_only=True))
@@ -359,7 +380,7 @@ def main():
         ema_model=ema_model,
         vae=vae,
         optimizer=optimizer,
-        mse_loss=mse_loss,
+        loss_fn=loss_fn,
         train_loader=train_loader,
         test_loader=test_loader,
         num_classes=style_classes,
