@@ -3,6 +3,7 @@ from PIL import Image, ImageOps
 import os
 import glob
 from torch.utils.data import Dataset
+import csv
 import struct
 from dataclasses import dataclass
 
@@ -195,6 +196,12 @@ class IAMPlacerDataset(Dataset):
         xml_files = glob.glob(os.path.join(self.basefolder, "xml", "*.xml"))
         img_folder = os.path.join(self.basefolder, "forms")
 
+        valids_fname = os.path.join(self.savefolder, "IAM_valids.csv")
+        valids_file = open(valids_fname, "w", newline="")
+        valids_keys = ["xmlname", "parsed", "imgname", "wid"]
+        writer = csv.writer(valids_file)
+        writer.writerow(valids_keys)
+
         res_keys = [
             "words",
             "wimgs",
@@ -202,8 +209,15 @@ class IAMPlacerDataset(Dataset):
         ]
         for k in res_keys:
             result[k] = []
+
         for fname in xml_files:
-            print(len(result["pairs"]), len(result["words"]))
+            info = {
+                "xmlname": os.path.basename(fname),
+                "parsed": 0,
+                "imgname": "",
+                "wid": "",
+            }
+            # print(len(result["pairs"]), len(result["words"]))
             try:
                 prompt = Prompt(fname)
                 img = Image.open(os.path.join(img_folder, f"{prompt.idd}.png"))
@@ -212,6 +226,19 @@ class IAMPlacerDataset(Dataset):
                 for k in res_keys:
                     for x in tmp[k]:
                         result[k].append(x)
+                info["imgname"] = f"{prompt.idd}.png"
+                info["wid"] = f'"{prompt.writer_id}"'
+                info["parsed"] = 1
             except Exception as e:
                 print(f"failed with {fname}", e)
+            writer.writerow([info[x] for x in valids_keys])
+
+        valids_file.close()
+        self.save_wpairs_only(result)
         return result
+
+    def save_wpairs_only(self, raw):
+        subres = {"words": raw["words"], "pairs": raw["pairs"]}
+        wpo_fname = os.path.join(self.savefolder, "placer_IAM_wpo.pt")
+        torch.save(subres, wpo_fname)
+        print("saved", wpo_fname)

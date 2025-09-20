@@ -96,7 +96,10 @@ class Word:
     @classmethod
     def from_elem(cls, elem, wid):
         parts = [x for x in elem]
-        if len(parts) == 1:
+        if len(parts) == 0:
+            err_string = "?? {}, {}, {}".format(elem, elem.attrib, wid)
+            raise RuntimeError("empty attribs: " + err_string)
+        elif len(parts) == 1:
             x_start = int(parts[0].attrib["x"])
             x_end = x_start + int(parts[0].attrib["width"])
             y_start = int(parts[0].attrib["y"])
