@@ -11,31 +11,25 @@ from utils.auxilary_functions import (
     image_resize_PIL,
     centered_PIL,
 )
-from utils.subprompt import Prompt
+from utils.subprompt import Prompt, Word
 
 #
 
 
 @dataclass(frozen=True, slots=True)
-class RelWordInfo:
+class RelWordIndices:
     cur_index: int
     next_index: int
-    diff_x: int
-    diff_y: int
-    cur_height: int
 
     @classmethod
     def from_bytes(cls, blob):
-        return RelWordInfo(*struct.unpack("IIiiI", blob))
+        return RelWordIndices(*struct.unpack("II", blob))
 
     def to_bytes(self):
         raw = struct.pack(
-            "IIiiI",
+            "II",
             self.cur_index,
             self.next_index,
-            self.diff_x,
-            self.diff_y,
-            self.cur_height,
         )
         return raw
 
@@ -87,25 +81,21 @@ def read_iam_image(img_id):
 
 def get_spacing_info(prompt, img, ind_start):
     pairs = []
-    wids = [prompt.writer_id for w in prompt.words]
-    words = [w.raw for w in prompt.words]
+    words = [w.to_bytes() for w in prompt.words]
     wimgs = [get_wimg_crop(w, img) for w in prompt.words]
     for i in range(len(prompt.words) - 1):
         cur_word = prompt.words[i]
         next_word = prompt.words[i + 1]
-        if line_of_word(cur_word) != line_of_word(next_word):
+        assert cur_word.writer_id == next_word.writer_id
+        if cur_word.parent_line() != next_word.parent_line():
             continue
 
         cur_index = ind_start + i
         next_index = ind_start + i + 1
-        diff_x = next_word.x_start - cur_word.x_end
-        diff_y = next_word.y_start - cur_word.y_end
-        cur_height = cur_word.height
-        rwi = RelWordInfo(cur_index, next_index, diff_x, diff_y, cur_height)
+        rwi = RelWordIndices(cur_index, next_index)
         pairs.append(rwi.to_bytes())
 
     result = dict()
-    result["wids"] = wids
     result["words"] = words
     result["wimgs"] = wimgs
     result["pairs"] = pairs
@@ -133,15 +123,17 @@ class IAMPlacerDataset(Dataset):
         return img
 
     def __getitem__(self, index):
-        rwi = struct_to_rwi(self.word_pairs[index])
-        wid = self.wids[rwi.cur_index]
+        rwi = self.word_pairs[index]
         cur_word = self.words[rwi.cur_index]
         next_word = self.words[rwi.next_index]
-        diff_y = rwi.diff_y
-        cur_height = rwi.cur_height
+        assert cur_word.writer_id == next_word.writer_id
+        wid = cur_word.writer_id
+        diff_x = next_word.x_start - cur_word.x_end
+        diff_y = next_word.y_start - cur_word.y_end
+        cur_height = cur_word.height
 
-        x_cur = {"image": self.read_image(rwi.cur_index), "text": cur_word}
-        x_next = {"image": self.read_image(rwi.next_index), "text": next_word}
+        x_cur = {"image": self.read_image(rwi.cur_index), "text": cur_word.raw}
+        x_next = {"image": self.read_image(rwi.next_index), "text": next_word.raw}
         diff_tens = torch.tensor(
             [diff_y / cur_height],
             dtype=torch.float32,
@@ -177,10 +169,9 @@ class IAMPlacerDataset(Dataset):
             raw = self.main_loader()
             torch.save(raw, save_file)
 
-        self.wids = raw["wids"]
-        self.word_pairs = raw["pairs"]
+        self.word_pairs = [RelWordIndices.from_bytes(x) for x in raw["pairs"]]
         self.wimgs = raw["wimgs"]
-        self.words = raw["words"]
+        self.words = [Word.from_bytes(x) for x in raw["words"]]
         self.num_pairs = len(self.word_pairs)
         print(f"dataset has {self.num_pairs} pairs")
 
@@ -190,7 +181,6 @@ class IAMPlacerDataset(Dataset):
         img_folder = os.path.join(self.basefolder, "forms")
 
         res_keys = [
-            "wids",
             "words",
             "wimgs",
             "pairs",
