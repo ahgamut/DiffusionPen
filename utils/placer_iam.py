@@ -4,7 +4,7 @@ import os
 import glob
 from torch.utils.data import Dataset
 import struct
-from collections import namedtuple
+from dataclasses import dataclass
 
 #
 from utils.auxilary_functions import (
@@ -14,28 +14,34 @@ from utils.auxilary_functions import (
 from utils.subprompt import Prompt
 
 #
-RelWordInfo = namedtuple("RelWordInfo", "cur_index next_index diff_x diff_y cur_height")
 
 
-def rwi_to_struct(rwi):
-    raw = struct.pack(
-        "IIiiI",
-        rwi.cur_index,
-        rwi.next_index,
-        rwi.diff_x,
-        rwi.diff_y,
-        rwi.cur_height,
-    )
-    return raw
+@dataclass(frozen=True, slots=True)
+class RelWordInfo:
+    cur_index: int
+    next_index: int
+    diff_x: int
+    diff_y: int
+    cur_height: int
 
+    @classmethod
+    def from_bytes(cls, blob):
+        return RelWordInfo(*struct.unpack("IIiiI", blob))
 
-def struct_to_rwi(raw):
-    rwi = RelWordInfo(*struct.unpack("IIiiI", raw))
-    return rwi
+    def to_bytes(self):
+        raw = struct.pack(
+            "IIiiI",
+            self.cur_index,
+            self.next_index,
+            self.diff_x,
+            self.diff_y,
+            self.cur_height,
+        )
+        return raw
 
 
 def line_of_word(word):
-    return word.id.split("-")[2]
+    return word.idd.split("-")[2]
 
 
 def iam_resizefix(img_s):
@@ -96,7 +102,7 @@ def get_spacing_info(prompt, img, ind_start):
         diff_y = next_word.y_start - cur_word.y_end
         cur_height = cur_word.height
         rwi = RelWordInfo(cur_index, next_index, diff_x, diff_y, cur_height)
-        pairs.append(rwi_to_struct(rwi))
+        pairs.append(rwi.to_bytes())
 
     result = dict()
     result["wids"] = wids
@@ -131,7 +137,6 @@ class IAMPlacerDataset(Dataset):
         wid = self.wids[rwi.cur_index]
         cur_word = self.words[rwi.cur_index]
         next_word = self.words[rwi.next_index]
-        diff_x = rwi.diff_x
         diff_y = rwi.diff_y
         cur_height = rwi.cur_height
 
@@ -196,7 +201,7 @@ class IAMPlacerDataset(Dataset):
             print(len(result["pairs"]))
             try:
                 prompt = Prompt(fname)
-                img = Image.open(os.path.join(img_folder, f"{prompt.id}.png"))
+                img = Image.open(os.path.join(img_folder, f"{prompt.idd}.png"))
                 img = img.convert("RGB")
                 tmp = get_spacing_info(prompt, img, len(result["pairs"]))
                 for k in res_keys:
