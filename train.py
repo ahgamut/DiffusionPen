@@ -287,12 +287,12 @@ def train(
             labels = torch.arange(16).long().to(args.device)
             n = len(labels)
 
-            if args.sampling_word == True:
+            if False:
                 # generates the word "text" in 16 different styles
                 words = ["text"]
                 for x_text in words:
                     # TODO: check when this is called
-                    ema_sampled_images = diffusion.sample(
+                    ema_sampled_images = diffusion.sampling(
                         ema_model, vae, n=n, x_text=x_text, labels=labels, args=args
                     )
 

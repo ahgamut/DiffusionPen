@@ -103,7 +103,7 @@ class CVLBaseDataset(Dataset):
         positives = self.wmap[wid]
         imgs = []
         paths = []
-        while len(result) < num_samples:
+        while len(paths) < num_samples:
             mas = random.sample(positives, num_samples)
             for ma_ind in mas:
                 ma = self.data[ma_ind]
@@ -215,12 +215,13 @@ class CVLDataset(CVLBaseDataset):
         args=None,
     ):
         super().__init__(
-            basefolder,
-            subset,
-            segmentation_level,
-            fixed_size,
-            character_classes,
-            args,
+            basefolder=basefolder,
+            subset=subset,
+            segmentation_level=segmentation_level,
+            fixed_size=fixed_size,
+            character_classes=character_classes,
+            transforms=transforms,
+            args=args,
         )
         self.tokenizer = tokenizer
         self.text_encoder = text_encoder
@@ -243,7 +244,7 @@ class CVLDataset(CVLBaseDataset):
 
         # transform
         img = self.transforms(img)
-        cor_image = self.transforms(cor_image)
+        cor_image = self.transforms(cor_image[0])
         s_imgs = torch.stack([self.transforms(x) for x in style_images])
 
         widi = self.windex_forward[wid]  # 0-309
