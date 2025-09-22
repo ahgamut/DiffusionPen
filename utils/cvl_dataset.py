@@ -112,6 +112,7 @@ class CVLBaseDataset(Dataset):
                     paths.append(self.img_paths[ma_ind])
 
         result = {"imgs": imgs[:num_samples], "paths": paths[:num_samples]}
+        result["imgs"] = [self.read_image(x) for x in result["imgs"]]
         return result
 
     @staticmethod
@@ -139,6 +140,10 @@ class CVLBaseDataset(Dataset):
             transcr = transcr.replace("|'" + cc.upper(), "'" + cc.upper())
         transcr = transcr.replace("|", " ")
         return transcr
+
+    def read_image(self, blob):
+        img = Image.frombytes(mode="RGB", size=(256, 64), data=blob)
+        return blob
 
     def main_loader(self, subset, segmentation_level):
         if subset == "train":
@@ -183,10 +188,9 @@ class CVLBaseDataset(Dataset):
 
                 img = centered_PIL(img, (64, 256), border_value=255.0)
 
-            # convert to ndarray before storing
-            img = np.array(img)
+            img_bytes = img.tobytes()
 
-            obj = (img, transcr, writer_id)
+            obj = (img_bytes, transcr, writer_id)
             if writer_id in wmap.keys():
                 wmap[writer_id].append(i)
             else:
@@ -268,7 +272,7 @@ class CVLStyleDataset(CVLBaseDataset):
         return len(self.data)
 
     def __getitem__(self, index):
-        img = self.data[index][0]
+        img = self.read_image(self.data[index][0])
         transcr = self.data[index][1]
         wid = self.data[index][2]
 
@@ -300,4 +304,4 @@ class CVLStyleDataset(CVLBaseDataset):
         images_batch = torch.stack(img)
         images_pos = torch.stack(positive)
         images_neg = torch.stack(negative)
-        return images_batch, transcr, wid, images_pos, images_neg, img_path
+        return images_batch, transcr, wid, images_pos, images_neg, ""
