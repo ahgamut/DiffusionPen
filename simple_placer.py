@@ -8,6 +8,7 @@ import argparse
 #
 from utils.placer_iam import RelWordIndices
 from utils.subprompt import Word
+from utils.arghandle import add_common_args
 
 #
 
@@ -196,6 +197,7 @@ def train(
                 os.path.join(wts_dir, "models", "simplace_optim.pt"),
             )
 
+
 def custom_loss(out=1.0, alpha=0.5, beta=2.0):
     def fn(pred, target):
         l2 = nn.functional.mse_loss(pred, target, reduction="none")
@@ -206,31 +208,38 @@ def custom_loss(out=1.0, alpha=0.5, beta=2.0):
     return fn
 
 
-
 def main():
     parser = argparse.ArgumentParser("simple-placer")
-    parser.add_argument(
-        "-i", "--input-data", default="./saved_iam_data/placer_IAM_wpo.pt", help="data"
-    )
     parser.add_argument("-b", "--batch-size", type=int, default=10, help="size")
     parser.add_argument("-e", "--epochs", default=10, type=int, help="epochs")
-    parser.add_argument(
-    "-w", "--wts-dir", default="./saved_iam_data", help="weights dir"
-    )
+    add_common_args(parser)
 
     args = parser.parse_args()
-    dset = SimplePlacerDataset(args.input_data)
+    if args.dataset == "iam":
+        dset = SimplePlacerDataset(args.input_data)
+    else:
+        raise RuntimeError(f"{args.dataset}: can't load dataset!")
     train_loader, test_loader = get_loaders(dset, args.batch_size)
+
+    if args.dataparallel == True:
+        device_ids = [3, 4]
+        print("using dataparallel with device:", device_ids)
+    else:
+        idx = int("".join(filter(str.isdigit, args.device)))
+        device_ids = [idx]
 
     model = SimplePlacer(
         in_features=12, out_features=1, total_wids=len(dset.windex_forward)
     )
-    model_wts_path = f"{args.wts_dir}/models/simplace_ckpt.pt"
+    model = DataParallel(model, device_ids=device_ids)
+    model_wts_path = f"{args.save_path}/models/simplace_ckpt.pt"
     if os.path.isfile(model_wts_path):
         model.load_state_dict(torch.load(model_wts_path, weights_only=True))
     loss_fn = custom_loss(0.02, alpha=0.5, beta=5.0)
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
     loss_meter = AvgMeter("MSE")
+
+    model = model.to(args.device)
 
     train(
         model=model,
@@ -240,7 +249,8 @@ def main():
         loss_fn=loss_fn,
         optimizer=optimizer,
         loss_meter=loss_meter,
-        wts_dir=args.wts_dir,
+        wts_dir=args.save_path,
+        args=args,
     )
 
 
