@@ -148,10 +148,10 @@ def val_epoch(
         loss = loss_fn(shifts, predicted_shifts)
         err = torch.abs(shifts - predicted_shifts)
         print(
-            torch.sum(err > 1).item(),
-            "pixels off by >1,",
-            torch.sum(err <= 1).item(),
-            "pixels off by <=1",
+            torch.sum(err > 0.02).item(),
+            "pixels off by >0.02,",
+            torch.sum(err <= 0.02).item(),
+            "pixels off by <=0.02",
         )
         # print(shifts - predicted_shifts)
 
@@ -308,7 +308,7 @@ def main():
     unet = DataParallel(unet, device_ids=device_ids)
     unet = unet.to(args.device)
 
-    loss_fn = custom_loss(1.0, alpha=0.5, beta=5.0)
+    loss_fn = custom_loss(0.04, alpha=1.0, beta=5.0)
     diffusion = Diffusion(img_size=args.img_size, args=args)
 
     ema = EMA(0.995)

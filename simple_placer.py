@@ -147,11 +147,11 @@ def get_loaders(dset, batch_size):
     return train_loader, test_loader
 
 
-def train_epoch(model, loader, loss_fn, optimizer, loss_meter):
+def train_epoch(model, loader, loss_fn, optimizer, loss_meter, args):
     model.train()
     for i, data in enumerate(loader):
-        widcov = data[:2]
-        targs = data[2]
+        widcov = (data[0].to(args.device), data[1].to(args.device))
+        targs = data[2].to(args.device)
         preds = model(widcov)
 
         loss = loss_fn(targs, preds)
@@ -163,12 +163,12 @@ def train_epoch(model, loader, loss_fn, optimizer, loss_meter):
     print("train", repr(loss_meter))
 
 
-def val_epoch(model, loader, loss_fn, optimizer, loss_meter):
+def val_epoch(model, loader, loss_fn, optimizer, loss_meter, args):
     model.eval()
     big_err = 0
     for i, data in enumerate(loader):
-        widcov = data[:2]
-        targs = data[2]
+        widcov = (data[0].to(args.device), data[1].to(args.device))
+        targs = data[2].to(args.device)
         preds = model(widcov)
 
         loss = loss_fn(targs, preds)
@@ -181,13 +181,21 @@ def val_epoch(model, loader, loss_fn, optimizer, loss_meter):
 
 
 def train(
-    model, epochs, train_loader, test_loader, loss_fn, optimizer, loss_meter, wts_dir
+    model,
+    epochs,
+    train_loader,
+    test_loader,
+    loss_fn,
+    optimizer,
+    loss_meter,
+    wts_dir,
+    args,
 ):
     for i in range(epochs + 1):
-        train_epoch(model, train_loader, loss_fn, optimizer, loss_meter)
+        train_epoch(model, train_loader, loss_fn, optimizer, loss_meter, args)
 
         if i % 10 == 0:
-            val_epoch(model, test_loader, loss_fn, optimizer, loss_meter)
+            val_epoch(model, test_loader, loss_fn, optimizer, loss_meter, args)
             torch.save(
                 model.state_dict(),
                 os.path.join(wts_dir, "models", "simplace_ckpt.pt"),
@@ -216,7 +224,7 @@ def main():
 
     args = parser.parse_args()
     if args.dataset == "iam":
-        dset = SimplePlacerDataset(args.input_data)
+        dset = SimplePlacerDataset("./saved_iam_data/placer_IAM_wpo.pt")
     else:
         raise RuntimeError(f"{args.dataset}: can't load dataset!")
     train_loader, test_loader = get_loaders(dset, args.batch_size)
@@ -231,7 +239,7 @@ def main():
     model = SimplePlacer(
         in_features=12, out_features=1, total_wids=len(dset.windex_forward)
     )
-    model = DataParallel(model, device_ids=device_ids)
+    model = nn.DataParallel(model, device_ids=device_ids)
     model_wts_path = f"{args.save_path}/models/simplace_ckpt.pt"
     if os.path.isfile(model_wts_path):
         model.load_state_dict(torch.load(model_wts_path, weights_only=True))
