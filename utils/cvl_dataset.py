@@ -143,7 +143,7 @@ class CVLBaseDataset(Dataset):
 
     def read_image(self, blob):
         img = Image.frombytes(mode="RGB", size=(256, 64), data=blob)
-        return blob
+        return img
 
     def main_loader(self, subset, segmentation_level):
         if subset == "train":
@@ -235,7 +235,7 @@ class CVLDataset(CVLBaseDataset):
         return len(self.data)
 
     def __getitem__(self, index):
-        img = self.data[index][0]
+        img = self.read_image(self.data[index][0])
         transcr = self.data[index][1]
         wid = self.data[index][2]
         img_path = self.img_paths[index]
