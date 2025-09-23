@@ -195,7 +195,7 @@ def make_nonmatches_fake(df, actuals, act_df, subsamp=0):
 def make_interps(df, actuals, act_df, n_anchors, subsamp=0):
     res = []
     #
-    alphas = list(np.arange(0, 1.1, 0.1))
+    alphas = list(np.arange(0.1, 1.1, 0.1))
     anchor_wids = random.sample(list(actuals), n_anchors)
 
     for i in range(len(anchor_wids)):
@@ -213,7 +213,7 @@ def make_interps(df, actuals, act_df, n_anchors, subsamp=0):
                     "file2_path": f"{wid1}-{wid2}-{a:.2f}",
                     "file2_type": f"sametext-{a:.2f}",
                     "file2_wid": "interp",
-                    "same_wid": a,
+                    "same_wid": f"{a:.2f}",
                 }
                 row_dict2 = {
                     "file1_path": anchor1["imgname"],
@@ -222,7 +222,7 @@ def make_interps(df, actuals, act_df, n_anchors, subsamp=0):
                     "file2_path": f"{wid1}-{wid2}-{a:.2f}",
                     "file2_type": f"difftext-{a:.2f}",
                     "file2_wid": "interp",
-                    "same_wid": a,
+                    "same_wid": f"{a:.2f}",
                 }
                 res.append(row_dict1)
                 res.append(row_dict2)
@@ -284,7 +284,7 @@ def runner(
         "clref": closed_set_df,
         "qmreal": matches_real,
         "qnreal": nonmatches_real,
-        "qmfake": matches_real,
+        "qmfake": matches_fake,
         "qnfake": nonmatches_fake,
         "qinterp": interps,
     }
