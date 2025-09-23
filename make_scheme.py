@@ -195,7 +195,7 @@ def make_nonmatches_fake(df, actuals, act_df, subsamp=0):
 def make_interps(df, actuals, act_df, n_anchors, subsamp=0):
     res = []
     #
-    alphas = list(np.arange(0.1, 1.1, 0.1))
+    alphas = list(np.arange(0.0, 1.1, 0.1))
     anchor_wids = random.sample(list(actuals), n_anchors)
 
     for i in range(len(anchor_wids)):
@@ -274,10 +274,8 @@ def runner(
 
     matches_real = make_matches_real(df, actuals, act_df, mm=mm)
     nonmatches_real = make_nonmatches_real(df, actuals, act_df, subsample)
-    matches_fake = make_matches_fake(df, actuals, act_df, mm=mm, subsamp=0)
-    nonmatches_fake = make_nonmatches_fake(
-        df, actuals, act_df, subsamp=max(subsample, 0.1)
-    )
+    matches_fake = make_matches_fake(df, actuals, act_df, mm=mm, subsamp=subsample)
+    nonmatches_fake = make_nonmatches_fake(df, actuals, act_df, subsamp=0.1)
     interps = make_interps(df, actuals, act_df, n_anchors, subsample)
 
     df_mapping = {

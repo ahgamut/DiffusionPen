@@ -86,7 +86,7 @@ def resave_fake(xmlname, imgname, targname, faketype):
         xpr = Prompt(xmlname)
         words = [w.raw for w in xpr.words]
         longest_word_length = max(len(word) for word in words)
-        raw_orig = Image.open(os.path.join("./iam_data", "forms", xpr.id + ".png"))
+        raw_orig = Image.open(os.path.join("./iam_data", "forms", xpr.idd + ".png"))
         raw_crop = xpr.get_cropped(raw_orig)
         s = IAM_TempLoader.map_wid_to_index(xpr.writer_id)
         max_line_width = raw_crop.width
@@ -201,7 +201,7 @@ def resave_interp(xmlname, imgname, targname, widinfo, interp):
         xpr = Prompt(xmlname)
         words = [w.raw for w in xpr.words]
         longest_word_length = max(len(word) for word in words)
-        raw_orig = Image.open(os.path.join("./iam_data", "forms", xpr.id + ".png"))
+        raw_orig = Image.open(os.path.join("./iam_data", "forms", xpr.idd + ".png"))
         raw_crop = xpr.get_cropped(raw_orig)
         s1 = IAM_TempLoader.map_wid_to_index(wid1)
         s2 = IAM_TempLoader.map_wid_to_index(wid2)
@@ -303,6 +303,9 @@ def main():
         help="file containing config CSVs",
     )
     parser.add_argument("--output-dir", default="./saved_iam_data", help="output dir")
+    parser.add_argument(
+        "--max-line-width", default=900, type=int, help="max line width"
+    )
     add_common_args(parser)
     args = parser.parse_args()
     ####
@@ -437,6 +440,7 @@ def main():
     CTX.mldict["tokenizer"] = tokenizer
     CTX.mldict["text_encoder"] = text_encoder
     CTX.mldict["args"] = args
+    IAM_TempLoader.check_preload()
 
     ####
     pieces = ["clref", "qmreal", "qnreal", "qmfake", "qnfake", "qinterp"]
