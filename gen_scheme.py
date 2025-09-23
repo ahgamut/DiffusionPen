@@ -2,9 +2,40 @@ import argparse
 import os
 import pandas as pd
 from PIL import Image, ImageOps
+import glob
+import sys
+import traceback
+import random
+import os
+import torch
+import torch.nn as nn
+import torchvision
+from torch import optim
+import copy
+import argparse
+from diffusers import AutoencoderKL, DDIMScheduler
+from torch.nn import DataParallel
+from torchvision import transforms
+from transformers import CanineModel, CanineTokenizer
+from PIL import Image
 
 #
+from models import UNetModel, ImageEncoder
+from models.diffpen2 import Diffusion, IAM_TempLoader
+from utils.auxilary_functions import *
+from utils.generation import (
+    setup_logging,
+    build_fake_image_N,
+    build_fake_interp_N,
+    add_rescale_padding,
+    build_paragraph_image,
+)
 from utils.subprompt import Word, Prompt
+from utils.arghandle import add_common_args
+
+
+class CTX:
+    mldict = dict()
 
 
 def save_threshed(img, fname):
@@ -21,6 +52,24 @@ def resave_real(xmlname, imgname, targname):
     save_threshed(crop, targname)
 
 
+def build_ref_paragraph(fakes, xpr, max_line_width, longest_word_length):
+    assert len(xpr.words) == len(fakes)
+    dupe = Image.new("RGB", size=(xpr.img_width, xpr.img_height), color="white")
+
+    for i in range(len(fakes)):
+        word = xpr.words[i]
+        fake = fakes[i]
+        ratio = word.height / fake.height
+        #
+        scaled_width = int(fake.width * ratio)
+        scaled_height = word.height
+        scaled_img = fakes[i].resize((scaled_width, scaled_height))
+        dupe.paste(scaled_img, (word.x_start, word.y_start))
+
+    dupe = dupe.convert("L")
+    return xpr.get_cropped(dupe)
+
+
 def make_closedset(fname, targdir):
     df = pd.read_csv(fname)
     for ind, row in df.iterrows():
@@ -34,12 +83,105 @@ def make_closedset(fname, targdir):
 def resave_fake(xmlname, imgname, targname, faketype):
     if "niceplace" in faketype:
         print("should regenerate", imgname, "place nicely and save")
+        xpr = Prompt(xmlname)
+        words = [w.raw for w in xpr.words]
+        longest_word_length = max(len(word) for word in words)
+        raw_orig = Image.open(os.path.join("./iam_data", "forms", xpr.id + ".png"))
+        raw_crop = xpr.get_cropped(raw_orig)
+        s = IAM_TempLoader.map_wid_to_index(xpr.writer_id)
+        max_line_width = raw_crop.width
+        max_word_length_width = 0
+        fakes, max_word_length_width = build_fake_image_N(
+            words,
+            s,
+            longest_word_length=longest_word_length,
+            max_word_length_width=max_word_length_width,
+            **CTX.mldict,
+        )
+        regen_img2 = build_ref_paragraph(
+            fakes,
+            xpr,
+            max_line_width=max_line_width,
+            longest_word_length=longest_word_length,
+        )
+        save_threshed(regen_img2, targname)
     elif "traintext" in faketype:
         print("should regenerate", imgname, "place however and save")
+        xpr = Prompt(xmlname)
+        words = [w.raw for w in xpr.words]
+        longest_word_length = max(len(word) for word in words)
+        s = IAM_TempLoader.map_wid_to_index(xpr.writer_id)
+        max_line_width = CTX.mldict["args"].max_line_width
+        max_word_length_width = 0
+        fakes, max_word_length_width = build_fake_image_N(
+            words,
+            s,
+            longest_word_length=longest_word_length,
+            max_word_length_width=max_word_length_width,
+            **CTX.mldict,
+        )
+        scaled_padded_words = add_rescale_padding(
+            words,
+            fakes,
+            max_word_length_width=max_word_length_width,
+            longest_word_length=longest_word_length,
+        )
+        regen_img = build_paragraph_image(
+            scaled_padded_words, max_line_width=max_line_width
+        )
+        save_threshed(regen_img, targname)
     elif "difftext1" in faketype:
         print("should generate LL using wid from", imgname, "and save")
+        xpr = Prompt(xmlname)
+        lines = open("./prompts/london-letter.txt").read()
+        words = lines.strip().split(" ")
+        longest_word_length = max(len(word) for word in words)
+        s = IAM_TempLoader.map_wid_to_index(xpr.writer_id)
+        max_line_width = CTX.mldict["args"].max_line_width
+        max_word_length_width = 0
+        fakes, max_word_length_width = build_fake_image_N(
+            words,
+            s,
+            longest_word_length=longest_word_length,
+            max_word_length_width=max_word_length_width,
+            **CTX.mldict,
+        )
+        scaled_padded_words = add_rescale_padding(
+            words,
+            fakes,
+            max_word_length_width=max_word_length_width,
+            longest_word_length=longest_word_length,
+        )
+        regen_img = build_paragraph_image(
+            scaled_padded_words, max_line_width=max_line_width
+        )
+        save_threshed(regen_img, targname)
     elif "difftext2" in faketype:
         print("should generate WOZ using wid from", imgname, "and save")
+        xpr = Prompt(xmlname)
+        lines = open("./prompts/woz-letter.txt").read()
+        words = lines.strip().split(" ")
+        longest_word_length = max(len(word) for word in words)
+        s = IAM_TempLoader.map_wid_to_index(xpr.writer_id)
+        max_line_width = CTX.mldict["args"].max_line_width
+        max_word_length_width = 0
+        fakes, max_word_length_width = build_fake_image_N(
+            words,
+            s,
+            longest_word_length=longest_word_length,
+            max_word_length_width=max_word_length_width,
+            **CTX.mldict,
+        )
+        scaled_padded_words = add_rescale_padding(
+            words,
+            fakes,
+            max_word_length_width=max_word_length_width,
+            longest_word_length=longest_word_length,
+        )
+        regen_img = build_paragraph_image(
+            scaled_padded_words, max_line_width=max_line_width
+        )
+        save_threshed(regen_img, targname)
 
 
 def resave_interp(xmlname, imgname, targname, widinfo, interp):
@@ -56,6 +198,31 @@ def resave_interp(xmlname, imgname, targname, widinfo, interp):
             "use same text and save to",
             targname,
         )
+        xpr = Prompt(xmlname)
+        words = [w.raw for w in xpr.words]
+        longest_word_length = max(len(word) for word in words)
+        raw_orig = Image.open(os.path.join("./iam_data", "forms", xpr.id + ".png"))
+        raw_crop = xpr.get_cropped(raw_orig)
+        s1 = IAM_TempLoader.map_wid_to_index(wid1)
+        s2 = IAM_TempLoader.map_wid_to_index(wid2)
+        max_line_width = raw_crop.width
+        CTX.mldict["args"].writer_1 = s1
+        CTX.mldict["args"].writer_2 = s2
+        CTX.mldict["args"].mix_rate = alpha
+        max_word_length_width = 0
+        fakes, max_word_length_width = build_fake_interp_N(
+            words,
+            longest_word_length=longest_word_length,
+            max_word_length_width=max_word_length_width,
+            **CTX.mldict,
+        )
+        regen_img2 = build_ref_paragraph(
+            fakes,
+            xpr,
+            max_line_width=max_line_width,
+            longest_word_length=longest_word_length,
+        )
+        save_threshed(regen_img2, targname)
     else:
         print(
             "should interpolate between",
@@ -65,6 +232,33 @@ def resave_interp(xmlname, imgname, targname, widinfo, interp):
             "use different text and save to",
             targname,
         )
+        xpr = Prompt(xmlname)
+        lines = open("./prompts/london-letter.txt").read()
+        words = lines.strip().split(" ")
+        longest_word_length = max(len(word) for word in words)
+        s1 = IAM_TempLoader.map_wid_to_index(wid1)
+        s2 = IAM_TempLoader.map_wid_to_index(wid2)
+        max_line_width = CTX.mldict["args"].max_line_width
+        CTX.mldict["args"].writer_1 = s1
+        CTX.mldict["args"].writer_2 = s2
+        CTX.mldict["args"].mix_rate = alpha
+        max_word_length_width = 0
+        fakes, max_word_length_width = build_fake_interp_N(
+            words,
+            longest_word_length=longest_word_length,
+            max_word_length_width=max_word_length_width,
+            **CTX.mldict,
+        )
+        scaled_padded_words = add_rescale_padding(
+            words,
+            fakes,
+            max_word_length_width=max_word_length_width,
+            longest_word_length=longest_word_length,
+        )
+        regen_img = build_paragraph_image(
+            scaled_padded_words, max_line_width=max_line_width
+        )
+        save_threshed(regen_img, targname)
 
 
 def process_csv(fname, targdir):
@@ -104,21 +298,151 @@ def process_csv(fname, targdir):
 def main():
     parser = argparse.ArgumentParser("generate-scheme")
     parser.add_argument(
-        "-d",
         "--config-dir",
         default="./saved_iam_data",
         help="file containing config CSVs",
     )
-    parser.add_argument(
-        "-o", "--output-dir", default="./saved_iam_data", help="output dir"
+    parser.add_argument("--output-dir", default="./saved_iam_data", help="output dir")
+    add_common_args(parser)
+    args = parser.parse_args()
+    ####
+    print(__file__, "with torch", torch.__version__)
+
+    # create save directories
+    setup_logging(args)
+    torch.cuda.empty_cache()
+
+    ############################ DATASET ############################
+    transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ]
     )
 
-    d = parser.parse_args()
+    character_classes = get_default_character_classes()
 
+    ######################### MODEL #######################################
+    vocab_size = len(character_classes)
+    style_classes = 339  # for IAM Dataset
+
+    if args.dataparallel == True:
+        device_ids = [3, 4]
+    else:
+        idx = int("".join(filter(str.isdigit, args.device)))
+        device_ids = [idx]
+    # unet = unet.to(args.device)
+
+    tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
+    text_encoder = CanineModel.from_pretrained("google/canine-c")
+    text_encoder = nn.DataParallel(text_encoder, device_ids=device_ids)
+    text_encoder = text_encoder.to(args.device)
+
+    unet = UNetModel(
+        image_size=args.img_size,
+        in_channels=args.channels,
+        model_channels=args.emb_dim,
+        out_channels=args.channels,
+        num_res_blocks=args.num_res_blocks,
+        attention_resolutions=(1, 1),
+        channel_mult=(1, 1),
+        num_heads=args.num_heads,
+        num_classes=style_classes,
+        context_dim=args.emb_dim,
+        vocab_size=vocab_size,
+        text_encoder=text_encoder,
+        args=args,
+    )  # .to(args.device)
+
+    unet = DataParallel(unet, device_ids=device_ids)
+    unet = unet.to(args.device)
+
+    optimizer = optim.AdamW(unet.parameters(), lr=0.0001)
+
+    diffusion = Diffusion(img_size=args.img_size, args=args)
+
+    ema_model = copy.deepcopy(unet).eval().requires_grad_(False)
+
+    # load from last checkpoint
+
+    if args.load_check == True:
+        unet.load_state_dict(
+            torch.load(f"{args.save_path}/models/ckpt.pt", weights_only=True)
+        )
+        optimizer.load_state_dict(
+            torch.load(f"{args.save_path}/models/optim.pt", weights_only=True)
+        )
+        ema_model.load_state_dict(
+            torch.load(f"{args.save_path}/models/ema_ckpt.pt", weights_only=True)
+        )
+
+    if args.latent == True:
+        vae = AutoencoderKL.from_pretrained(args.stable_dif_path, subfolder="vae")
+        vae = DataParallel(vae, device_ids=device_ids)
+        vae = vae.to(args.device)
+        # Freeze vae and text_encoder
+        vae.requires_grad_(False)
+    else:
+        vae = None
+
+    # add DDIM scheduler from huggingface
+    ddim = DDIMScheduler.from_pretrained(args.stable_dif_path, subfolder="scheduler")
+
+    #### STYLE ####
+    feature_extractor = ImageEncoder(
+        model_name="mobilenetv2_100", num_classes=0, pretrained=True, trainable=True
+    )
+    PATH = args.style_path
+
+    state_dict = torch.load(PATH, map_location=args.device, weights_only=True)
+    model_dict = feature_extractor.state_dict()
+    state_dict = {
+        k: v
+        for k, v in state_dict.items()
+        if k in model_dict and model_dict[k].shape == v.shape
+    }
+    model_dict.update(state_dict)
+    feature_extractor.load_state_dict(model_dict)
+    feature_extractor = DataParallel(feature_extractor, device_ids=device_ids)
+    feature_extractor = feature_extractor.to(args.device)
+    feature_extractor.requires_grad_(False)
+    feature_extractor.eval()
+
+    unet.load_state_dict(
+        torch.load(
+            f"{args.save_path}/models/ckpt.pt",
+            map_location=args.device,
+            weights_only=True,
+        )
+    )
+    unet.eval()
+
+    ema_model = copy.deepcopy(unet).eval().requires_grad_(False)
+    ema_model.load_state_dict(
+        torch.load(
+            f"{args.save_path}/models/ema_ckpt.pt",
+            map_location=args.device,
+            weights_only=True,
+        )
+    )
+    ema_model.eval()
+    ####
+
+    CTX.mldict["diffusion"] = diffusion
+    CTX.mldict["ema_model"] = ema_model
+    CTX.mldict["vae"] = vae
+    CTX.mldict["feature_extractor"] = feature_extractor
+    CTX.mldict["ddim"] = ddim
+    CTX.mldict["transform"] = transform
+    CTX.mldict["tokenizer"] = tokenizer
+    CTX.mldict["text_encoder"] = text_encoder
+    CTX.mldict["args"] = args
+
+    ####
     pieces = ["clref", "qmreal", "qnreal", "qmfake", "qnfake", "qinterp"]
     for p in pieces:
-        fname = os.path.join(d.config_dir, f"samp-{p}.csv")
-        targdir = os.path.join(d.output_dir, p)
+        fname = os.path.join(args.config_dir, f"samp-{p}.csv")
+        targdir = os.path.join(args.output_dir, p)
         os.makedirs(targdir, exist_ok=True)
         process_csv(fname, targdir)
 
