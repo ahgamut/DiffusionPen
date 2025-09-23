@@ -130,7 +130,7 @@ class IAMPlacerDataset(Dataset):
         # finalize has checked that wids are same
         wid = cur_word.writer_id
         diff_x = next_word.x_start - cur_word.x_end
-        diff_y = next_word.y_start - cur_word.y_end
+        diff_y = next_word.y_start - cur_word.y_start
         cur_height = cur_word.height
 
         x_cur = {"image": self.read_image(rwi.cur_index), "text": cur_word.raw}

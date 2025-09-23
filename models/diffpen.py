@@ -209,7 +209,7 @@ class Diffusion:
 
         with torch.no_grad():
             style_images = None
-            text_features = x_text  # [x_text]*n
+            text_features = [x_text] * n
             # print('text features', text_features.shape)
             text_features = tokenizer(
                 text_features,
@@ -254,7 +254,7 @@ class Diffusion:
                             five_styles = matching_lines_style[:5]
                             five_styles = [matching_lines[0]] * 5
                             # five_styles = random.sample(matching_lines, 5)
-                        print("five_styles", five_styles)
+                        # print("five_styles", five_styles)
                         # five_styles = random.sample(matching_lines, 5)
 
                         cor_image_random = random.sample(matching_lines, 1)

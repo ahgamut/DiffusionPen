@@ -4,8 +4,8 @@ import torch.nn as nn
 import numpy as np
 from torch.utils.data import DataLoader, random_split
 import torchvision
-from tqdm import tqdm
 from torch import optim
+from tqdm import tqdm
 import copy
 import argparse
 import json
@@ -213,7 +213,7 @@ def train(
 
     for epoch in range(args.epochs):
         print("Epoch:", epoch)
-        pbar = tqdm(loader)
+        pbar = tqdm(loader, desc="\n::")
         for i, data in enumerate(pbar):
             images = data[0].to(args.device)
             transcr = data[1]
@@ -283,17 +283,29 @@ def train(
             if lr_scheduler is not None:
                 lr_scheduler.step()
 
+        print("train MSE:", repr(loss_meter))
+
         if epoch % 10 == 0:
             labels = torch.arange(16).long().to(args.device)
             n = len(labels)
 
-            if False:
+            if True:
                 # generates the word "text" in 16 different styles
-                words = ["text"]
+                words = ["text", "sample", "images"]
                 for x_text in words:
                     # TODO: check when this is called
                     ema_sampled_images = diffusion.sampling(
-                        ema_model, vae, n=n, x_text=x_text, labels=labels, args=args
+                        ema_model,
+                        vae,
+                        n=n,
+                        x_text=x_text,
+                        labels=labels,
+                        args=args,
+                        style_extractor=style_extractor,
+                        noise_scheduler=noise_scheduler,
+                        transform=transforms,
+                        tokenizer=tokenizer,
+                        text_encoder=text_encoder,
                     )
 
                     epoch_n = epoch
