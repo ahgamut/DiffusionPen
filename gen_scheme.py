@@ -63,6 +63,8 @@ def build_ref_paragraph(fakes, xpr, max_line_width, longest_word_length):
         #
         scaled_width = int(fake.width * ratio)
         scaled_height = word.height
+        scaled_width = max(scaled_width, 3)
+        scaled_height = max(scaled_height, 3)
         scaled_img = fakes[i].resize((scaled_width, scaled_height))
         dupe.paste(scaled_img, (word.x_start, word.y_start))
 

@@ -99,9 +99,14 @@ def add_rescale_padding(
             else:
                 # resize to max height while maintaining aspect ratio
                 # ar = scaled_img.width / scaled_img.height
+                rsz_width = int(max_height * as_ratio) - 4
+                rsz_height = max_height - 4
+
+                rsz_width = max(3, rsz_width)
+                rsz_height = max(3, rsz_height)
 
                 scaled_img = scaled_img.resize(
-                    (int(max_height * as_ratio) - 4, max_height - 4)
+                    (rsz_width, rsz_height)
                 )
                 padding = (max_height - scaled_img.height) // 2
                 padded_img = np.pad(
