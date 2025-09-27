@@ -137,6 +137,7 @@ def build_backups(cvl_folder):
     for subset in ["test", "val", "train", "full"]:
         sd = CVLStyleDataset(
             basefolder=cvl_folder,
+            segmentation_level="word",
             subset=subset,
             fixed_size=(1 * 64, 256),
             transforms=tform,

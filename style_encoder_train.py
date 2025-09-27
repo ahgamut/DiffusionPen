@@ -490,6 +490,7 @@ def build_CVLDataset(args):
     train_data = CVLStyleDataset(
         basefolder=dataset_folder,
         subset="train",
+        segmentation_level="word",
         fixed_size=(1 * 64, 256),
         transforms=train_transform,
     )

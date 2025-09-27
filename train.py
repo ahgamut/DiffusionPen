@@ -312,7 +312,7 @@ def train(
                     sampled_ema = save_image_grid(
                         ema_sampled_images,
                         os.path.join(
-                            args.save_path, "images", f"{x_text}_{epoch_n}_ema.jpg"
+                            args.save_path, "images", f"{epoch_n:04d}_{x_text}_ema.jpg"
                         ),
                         args,
                     )
