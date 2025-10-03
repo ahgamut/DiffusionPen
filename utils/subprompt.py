@@ -22,15 +22,26 @@ def enpack_string(string):
     return l, enc
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class Word:
     x_start: int
     x_end: int
     y_start: int
     y_end: int
+    pl_width: int
+    pl_height: int
+    pl_ystart: int
     raw: str
     idd: str
     wid: str
+
+    @property
+    def nwidth(self):
+        return (self.x_end - self.x_start) / self.pl_width
+
+    @property
+    def nheight(self):
+        return (self.y_end - self.y_start) / self.pl_height
 
     @property
     def width(self):
@@ -67,11 +78,14 @@ class Word:
         l2, enc2 = enpack_string(self.idd)
         l3, enc3 = enpack_string(self.wid)
         blob = struct.pack(
-            f"iiiiB{l1}sB{l2}sB{l3}s",
+            f"iiiiiiiB{l1}sB{l2}sB{l3}s",
             self.x_start,
             self.x_end,
             self.y_start,
             self.y_end,
+            self.pl_width,
+            self.pl_height,
+            self.pl_ystart,
             l1,
             enc1,
             l2,
@@ -84,8 +98,8 @@ class Word:
     @classmethod
     def from_bytes(cls, blob):
         offset = 0
-        things = struct.unpack("iiii", blob[:16])
-        offset += 16
+        things = struct.unpack("iiiiii", blob[:28])
+        offset += 28
         l1, raw = depack_string(blob, offset)
         offset += l1 + 1  # because l1 is a 'B'
         l2, idd = depack_string(blob, offset)
@@ -94,7 +108,7 @@ class Word:
         return Word(*things, raw, idd, wid)
 
     @classmethod
-    def from_elem(cls, elem, wid):
+    def get_startend(cls, elem):
         parts = [x for x in elem]
         if len(parts) == 0:
             err_string = "?? {}, {}, {}".format(elem, elem.attrib, wid)
@@ -110,9 +124,14 @@ class Word:
             y_start = min(int(p.attrib["y"]) for p in parts)
             y_end = max(int(p.attrib["y"]) + int(p.attrib["height"]) for p in parts)
 
+        return x_start, y_start, x_end, y_end
+
+    @classmethod
+    def from_elem(cls, elem, wid, plw, plh, ply):
+        x_start, y_start, x_end, y_end = cls.get_startend(elem)
         raw = unescape(elem.attrib["text"])
         idd = elem.attrib["id"]
-        return Word(x_start, x_end, y_start, y_end, raw, idd, wid)
+        return Word(x_start, x_end, y_start, y_end, plw, plh, ply, raw, idd, wid)
 
 
 class Prompt:
@@ -129,19 +148,28 @@ class Prompt:
         text_prompt = "\n".join(text_prompt)
         text_prompt = re.sub("([^a-zA-Z\d\s:])", " \\1 ", text_prompt)
         # print(text_prompt)
+        self.img_width = int(root.attrib["width"])
+        self.img_height = int(root.attrib["height"])
 
         words = []
         for l in parts[1]:
-            for w in l:
-                if w.tag == "word":
-                    words.append(Word.from_elem(w, self.writer_id))
-                else:
-                    # this is a line contour
-                    pass
+            x0 = 1e5
+            x1 = -1
+            y0 = 1e5
+            y1 = -1
+            for w in l.findall("word"):
+                xs0, ys0, xs1, ys1 = Word.get_startend(w)
+                x0 = min(x0, xs0)
+                y0 = min(y0, ys0)
+                x1 = max(x1, xs1)
+                y1 = max(y1, ys1)
+
+            plw = max(self.img_width, x1 - x0)
+            plh = y1 - y0
+            for w in l.findall("word"):
+                words.append(Word.from_elem(w, self.writer_id, plw, plh, y0))
         # print(words)
 
-        self.img_width = int(root.attrib["width"])
-        self.img_height = int(root.attrib["height"])
         self.text_prompt = text_prompt
         self.words = words
 
@@ -159,6 +187,9 @@ class Prompt:
 
         self.width = self.x_end - self.x_start
         self.height = self.y_end - self.y_start
+
+        for w in self.words:
+            w.pl_width = self.width
 
     def get_cropped(self, img):
         cropped = img.crop((self.x_start, self.y_start, self.x_end, self.y_end))
@@ -178,16 +209,16 @@ class Prompt:
 
 
 def main():
-    p = Prompt("try-gen/a06-124.xml")
+    p = Prompt("saved_iam_data/a06-124.xml")
     for w1 in p.words:
         blob1 = w1.to_bytes()
         w2 = Word.from_bytes(blob1)
         blob2 = w2.to_bytes()
         print(str(w1) == str(w2), blob1 == blob2)
         print(w1, w2)
-    raw = Image.open("try-gen/a06-124.png").convert("RGB")
-    crop = p.get_anno_crop(raw)
-    crop.save("pls.png")
+    # raw = Image.open("try-gen/a06-124.png").convert("RGB")
+    # crop = p.get_anno_crop(raw)
+    # crop.save("pls.png")
 
 
 if __name__ == "__main__":
