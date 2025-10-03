@@ -308,7 +308,7 @@ def main():
     unet = DataParallel(unet, device_ids=device_ids)
     unet = unet.to(args.device)
 
-    loss_fn = custom_loss(0.04, alpha=1.0, beta=5.0)
+    loss_fn = custom_loss(0.01, alpha=1.0, beta=5.0)
     diffusion = Diffusion(img_size=args.img_size, args=args)
 
     ema = EMA(0.995)

@@ -129,14 +129,14 @@ class IAMPlacerDataset(Dataset):
         next_word = self.words[rwi.next_index]
         # finalize has checked that wids are same
         wid = cur_word.writer_id
-        diff_x = next_word.x_start - cur_word.x_end
-        diff_y = next_word.y_start - cur_word.y_start
+        diff_x = (next_word.x_start - cur_word.x_end) / cur_word.pl_width
+        diff_y = (next_word.y_start - cur_word.y_start) / cur_word.pl_height
         cur_height = cur_word.height
 
         x_cur = {"image": self.read_image(rwi.cur_index), "text": cur_word.raw}
         x_next = {"image": self.read_image(rwi.next_index), "text": next_word.raw}
         diff_tens = torch.tensor(
-            [diff_y / 50],
+            [diff_x],
             dtype=torch.float32,
             requires_grad=False,
         )

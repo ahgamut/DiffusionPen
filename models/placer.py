@@ -24,7 +24,7 @@ class HorizontalPlacer(nn.Module):
         self.combi = nn.Bilinear(64, style_size, 128)
         # return spacing coefficients
         self.rspce = nn.Bilinear(128, 128, 1)
-        self.ac = nn.Tanh()
+        self.ac = nn.Sigmoid()
         self.ac2 = nn.Softshrink(lambd=1.0)
 
     def forward(self, x_cur, x_next):
