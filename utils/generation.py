@@ -105,9 +105,7 @@ def add_rescale_padding(
                 rsz_width = max(3, rsz_width)
                 rsz_height = max(3, rsz_height)
 
-                scaled_img = scaled_img.resize(
-                    (rsz_width, rsz_height)
-                )
+                scaled_img = scaled_img.resize((rsz_width, rsz_height))
                 padding = (max_height - scaled_img.height) // 2
                 padded_img = np.pad(
                     scaled_img,

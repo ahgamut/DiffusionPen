@@ -98,7 +98,7 @@ class Word:
     @classmethod
     def from_bytes(cls, blob):
         offset = 0
-        things = struct.unpack("iiiiii", blob[:28])
+        things = struct.unpack("iiiiiii", blob[:28])
         offset += 28
         l1, raw = depack_string(blob, offset)
         offset += l1 + 1  # because l1 is a 'B'
@@ -108,7 +108,7 @@ class Word:
         return Word(*things, raw, idd, wid)
 
     @classmethod
-    def get_startend(cls, elem):
+    def get_startend(cls, elem, wid):
         parts = [x for x in elem]
         if len(parts) == 0:
             err_string = "?? {}, {}, {}".format(elem, elem.attrib, wid)
@@ -128,7 +128,7 @@ class Word:
 
     @classmethod
     def from_elem(cls, elem, wid, plw, plh, ply):
-        x_start, y_start, x_end, y_end = cls.get_startend(elem)
+        x_start, y_start, x_end, y_end = cls.get_startend(elem, wid)
         raw = unescape(elem.attrib["text"])
         idd = elem.attrib["id"]
         return Word(x_start, x_end, y_start, y_end, plw, plh, ply, raw, idd, wid)
@@ -158,7 +158,7 @@ class Prompt:
             y0 = 1e5
             y1 = -1
             for w in l.findall("word"):
-                xs0, ys0, xs1, ys1 = Word.get_startend(w)
+                xs0, ys0, xs1, ys1 = Word.get_startend(w, self.writer_id)
                 x0 = min(x0, xs0)
                 y0 = min(y0, ys0)
                 x1 = max(x1, xs1)
