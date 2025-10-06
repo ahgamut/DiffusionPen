@@ -4,8 +4,10 @@ from torch.utils.data import Dataset, DataLoader, random_split
 import sys
 import os
 import argparse
+from transformers import CanineModel, CanineTokenizer
 
 #
+from models import WordLocator
 from utils.placer_iam import RelWordIndices
 from utils.subprompt import Word
 from utils.arghandle import add_common_args
@@ -66,17 +68,17 @@ class WordLocationDataset(Dataset):
         return torch.tensor([vec])
 
     def __getitem__(self, index):
-        words = self.words[index]
+        cur_word = self.words[index]
         targs = self.make_targets(cur_word)
         wid0 = self.windex_forward[cur_word.writer_id]
         wids = torch.tensor([wid0], dtype=torch.int64)
 
-        return wid0, cur_word.raw, targs
+        return wids, cur_word.raw, targs
 
     def collate_fn(self, batch):
         wids, covs, targs = zip(*batch)
         wids = torch.cat(wids)
-        targs = torch.stack(targs)
+        targs = torch.cat(targs)
         return wids, covs, targs
 
 
@@ -85,10 +87,18 @@ def get_loaders(dset, batch_size):
     test_size = len(dset) - train_size
     train_data, test_data = random_split(dset, [train_size, test_size])
     train_loader = DataLoader(
-        train_data, shuffle=True, num_workers=2, batch_size=batch_size
+        train_data,
+        shuffle=True,
+        num_workers=2,
+        batch_size=batch_size,
+        collate_fn=dset.collate_fn,
     )
     test_loader = DataLoader(
-        test_data, shuffle=True, num_workers=2, batch_size=batch_size
+        test_data,
+        shuffle=True,
+        num_workers=2,
+        batch_size=batch_size,
+        collate_fn=dset.collate_fn,
     )
     return train_loader, test_loader
 
@@ -203,14 +213,14 @@ def custom_loss(out=1.0, alpha=0.5, beta=2.0):
 
 
 def main():
-    parser = argparse.ArgumentParser("simple-placer")
+    parser = argparse.ArgumentParser("locator-train")
     parser.add_argument("-b", "--batch-size", type=int, default=10, help="size")
     parser.add_argument("-e", "--epochs", default=10, type=int, help="epochs")
     add_common_args(parser)
 
     args = parser.parse_args()
     if args.dataset == "iam":
-        dset = SimplePlacerDataset("./saved_iam_data/placer_IAM_wpo.pt")
+        dset = WordLocationDataset("./saved_iam_data/placer_IAM_wpo.pt")
     else:
         raise RuntimeError(f"{args.dataset}: can't load dataset!")
     train_loader, test_loader = get_loaders(dset, args.batch_size)
