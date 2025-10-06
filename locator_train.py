@@ -170,6 +170,7 @@ def train(
     args,
 ):
     for i in range(epochs + 1):
+        print("epoch:", i, end=" ")
         train_epoch(
             model,
             tokenizer,
@@ -248,7 +249,7 @@ def main():
     model = model.to(args.device)
 
     ####
-    loss_fn = custom_loss(0.01, alpha=0.5, beta=5.0)
+    loss_fn = custom_loss(0.01, alpha=1.0, beta=5.0)
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
     loss_meter = AvgMeter("MSE")
 
