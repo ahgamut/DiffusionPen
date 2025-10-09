@@ -38,7 +38,7 @@ def main():
     parser = argparse.ArgumentParser("diffusion-paragraph")
     parser.add_argument("-w", "--writer-id", type=int, default=12)
     parser.add_argument("-i", "--text-file", type=file_check, default="./sample.txt")
-    parser.add_argument("-o", "--outdir", type=str, default="./outputs/")
+    parser.add_argument("-o", "--output", type=str, default="./outputs/")
     parser.add_argument(
         "--max-line-width", default=900, type=int, help="max line width"
     )
@@ -192,7 +192,7 @@ def main():
     )
 
     for word, img in zip(words, fakes):
-        img.save(os.path.join(args.outdir, f"gen_{word}.png"))
+        img.save(os.path.join(args.output, f"gen_{s}_{word}.png"))
 
 
 if __name__ == "__main__":
