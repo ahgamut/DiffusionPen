@@ -189,6 +189,7 @@ def main():
         text_encoder=text_encoder,
         longest_word_length=longest_word_length,
         max_word_length_width=max_word_length_width,
+        crop_whitespace=False,
     )
 
     for word, img in zip(words, fakes):
