@@ -45,7 +45,21 @@ def main():
     )
     parser.add_argument("--font-size", default=16, type=int, help="font size")
     parser.add_argument("--dpi", default=300, help="DPI")
+    parser.add_argument(
+        "--image-aspect",
+        action="store_true",
+        dest="use_aspect",
+        help="use aspect ratio from image",
+    )
+    parser.add_argument(
+        "--font-aspect",
+        action="store_false",
+        dest="use_aspect",
+        help="use aspect ratio from font",
+    )
+
     add_common_args(parser)
+    parser.set_defaults(use_aspect=True)
 
     args = parser.parse_args()
     print(__file__, "with torch", torch.__version__)
@@ -202,6 +216,7 @@ def main():
         max_line_width=max_line_width,
         font_size=args.font_size,
         dpi=args.dpi,
+        use_aspect=args.use_aspect,
     )
     paragraph_image.save(args.output)
 
