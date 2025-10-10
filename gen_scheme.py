@@ -18,6 +18,7 @@ from torch.nn import DataParallel
 from torchvision import transforms
 from transformers import CanineModel, CanineTokenizer
 from PIL import Image
+from skimage.filters import threshold_otsu
 
 #
 from models import UNetModel, ImageEncoder
@@ -30,6 +31,7 @@ from utils.generation import (
     add_rescale_padding,
     build_paragraph_image,
 )
+from utils.relcharsize import build_placed_paragraph
 from utils.subprompt import Word, Prompt
 from utils.arghandle import add_common_args
 
@@ -41,8 +43,11 @@ class CTX:
 def save_threshed(img, fname):
     # thresh separately? use Otsu?
     # thresh here?
-    # tmp = ImageOps.autocontrast(img)
-    img.save(fname)
+    arr = np.array(img)
+    thr = np.array(arr > skfilt.threshold_otsu(arr), dtype=np.uint8)
+    thr = 255 * thr
+    timg = Image.fromarray(thr).convert("L")
+    timg.save(fname)
 
 
 def resave_real(xmlname, imgname, targname):
@@ -83,14 +88,14 @@ def make_closedset(fname, targdir):
 
 
 def resave_fake(xmlname, imgname, targname, faketype):
+    xpr = Prompt(xmlname)
+    raw_orig = Image.open(os.path.join("./iam_data", "forms", xpr.idd + ".png"))
+    s = IAM_TempLoader.map_wid_to_index(xpr.writer_id)
     if "niceplace" in faketype:
         print("should regenerate", imgname, "place nicely and save")
-        xpr = Prompt(xmlname)
         words = [w.raw for w in xpr.words]
         longest_word_length = max(len(word) for word in words)
-        raw_orig = Image.open(os.path.join("./iam_data", "forms", xpr.idd + ".png"))
         raw_crop = xpr.get_cropped(raw_orig)
-        s = IAM_TempLoader.map_wid_to_index(xpr.writer_id)
         max_line_width = raw_crop.width
         max_word_length_width = 0
         fakes, max_word_length_width = build_fake_image_N(
@@ -100,19 +105,19 @@ def resave_fake(xmlname, imgname, targname, faketype):
             max_word_length_width=max_word_length_width,
             **CTX.mldict,
         )
-        regen_img2 = build_ref_paragraph(
+        regen_img = build_ref_paragraph(
             fakes,
             xpr,
             max_line_width=max_line_width,
             longest_word_length=longest_word_length,
         )
-        save_threshed(regen_img2, targname)
-    elif "traintext" in faketype:
+        save_threshed(regen_img, targname)
+        return
+
+    if "traintext" in faketype:
         print("should regenerate", imgname, "place however and save")
-        xpr = Prompt(xmlname)
         words = [w.raw for w in xpr.words]
         longest_word_length = max(len(word) for word in words)
-        s = IAM_TempLoader.map_wid_to_index(xpr.writer_id)
         max_line_width = CTX.mldict["args"].max_line_width
         max_word_length_width = 0
         fakes, max_word_length_width = build_fake_image_N(
@@ -122,23 +127,11 @@ def resave_fake(xmlname, imgname, targname, faketype):
             max_word_length_width=max_word_length_width,
             **CTX.mldict,
         )
-        scaled_padded_words = add_rescale_padding(
-            words,
-            fakes,
-            max_word_length_width=max_word_length_width,
-            longest_word_length=longest_word_length,
-        )
-        regen_img = build_paragraph_image(
-            scaled_padded_words, max_line_width=max_line_width
-        )
-        save_threshed(regen_img, targname)
     elif "difftext1" in faketype:
         print("should generate LL using wid from", imgname, "and save")
-        xpr = Prompt(xmlname)
         lines = open("./prompts/london-letter.txt").read()
         words = lines.strip().split(" ")
         longest_word_length = max(len(word) for word in words)
-        s = IAM_TempLoader.map_wid_to_index(xpr.writer_id)
         max_line_width = CTX.mldict["args"].max_line_width
         max_word_length_width = 0
         fakes, max_word_length_width = build_fake_image_N(
@@ -148,23 +141,11 @@ def resave_fake(xmlname, imgname, targname, faketype):
             max_word_length_width=max_word_length_width,
             **CTX.mldict,
         )
-        scaled_padded_words = add_rescale_padding(
-            words,
-            fakes,
-            max_word_length_width=max_word_length_width,
-            longest_word_length=longest_word_length,
-        )
-        regen_img = build_paragraph_image(
-            scaled_padded_words, max_line_width=max_line_width
-        )
-        save_threshed(regen_img, targname)
     elif "difftext2" in faketype:
         print("should generate WOZ using wid from", imgname, "and save")
-        xpr = Prompt(xmlname)
         lines = open("./prompts/woz-letter.txt").read()
         words = lines.strip().split(" ")
         longest_word_length = max(len(word) for word in words)
-        s = IAM_TempLoader.map_wid_to_index(xpr.writer_id)
         max_line_width = CTX.mldict["args"].max_line_width
         max_word_length_width = 0
         fakes, max_word_length_width = build_fake_image_N(
@@ -174,6 +155,9 @@ def resave_fake(xmlname, imgname, targname, faketype):
             max_word_length_width=max_word_length_width,
             **CTX.mldict,
         )
+
+    postparts = faketype.split("-")
+    if len(postparts) == 2:
         scaled_padded_words = add_rescale_padding(
             words,
             fakes,
@@ -183,7 +167,21 @@ def resave_fake(xmlname, imgname, targname, faketype):
         regen_img = build_paragraph_image(
             scaled_padded_words, max_line_width=max_line_width
         )
-        save_threshed(regen_img, targname)
+    elif len(postparts) == 4:
+        font_size = int(postparts[2])
+        use_aspect = postparts[3] == "img"
+        regen_img = build_placed_paragraph(
+            words,
+            fakes,
+            max_line_width=max_line_width,
+            font_size=font_size,
+            dpi=300,
+            use_aspect=use_aspect,
+        )
+    else:
+        raise RuntimeError("invalid post-processing:" + faketype)
+
+    save_threshed(regen_img, targname)
 
 
 def resave_interp(xmlname, imgname, targname, widinfo, interp):

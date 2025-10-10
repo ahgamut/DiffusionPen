@@ -56,8 +56,20 @@ def remake_fakes(df):
     for fake_type in [
         "fake-niceplace",
         "fake-traintext",
+        "fake-traintext-12-img",
+        "fake-traintext-12-font",
+        "fake-traintext-16-img",
+        "fake-traintext-16-font",
         "fake-difftext1",
+        "fake-difftext1-12-img",
+        "fake-difftext1-12-font",
+        "fake-difftext1-16-img",
+        "fake-difftext1-16-font",
         "fake-difftext2",
+        "fake-difftext2-12-img",
+        "fake-difftext2-12-font",
+        "fake-difftext2-16-img",
+        "fake-difftext2-16-font",
     ]:
         dupe = df.copy()
         dupe["file2_type"] = fake_type
