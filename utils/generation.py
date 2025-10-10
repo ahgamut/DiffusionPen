@@ -194,6 +194,7 @@ def build_fake_image_1(
     transform,
     tokenizer,
     text_encoder,
+    crop_whitespace=True,
 ):
     # print("Word:", word)
     labels = torch.tensor([writer_id]).long().to(args.device)
@@ -215,8 +216,9 @@ def build_fake_image_1(
     image = ema_sampled_images.squeeze(0)
     im = torchvision.transforms.ToPILImage()(image)
     im = im.convert("L")
-    im = crop_whitespace_width(im)
-    im = Image.fromarray(im)
+    if crop_whitespace:
+        im = crop_whitespace_width(im)
+        im = Image.fromarray(im)
     return im
 
 
@@ -230,6 +232,7 @@ def build_fake_interp_1(
     transform,
     tokenizer,
     text_encoder,
+    crop_whitespace=True,
 ):
     # print("Word:", word)
     word = args.sampling_word
@@ -253,8 +256,9 @@ def build_fake_interp_1(
     image = ema_sampled_images.squeeze(0)
     im = torchvision.transforms.ToPILImage()(image)
     im = im.convert("L")
-    im = crop_whitespace_width(im)
-    im = Image.fromarray(im)
+    if crop_whitespace:
+        im = crop_whitespace_width(im)
+        im = Image.fromarray(im)
     return im
 
 
@@ -272,6 +276,7 @@ def build_fake_image_N(
     text_encoder,
     longest_word_length,
     max_word_length_width,
+    crop_whitespace=True,
 ):
     labels = torch.tensor([s]).long().to(args.device)
     ema_sampled_images = diffusion.sampling_bulk(
@@ -295,8 +300,9 @@ def build_fake_image_N(
         image = ema_sampled_images[i].squeeze(0)
         im = topil(image)
         im = im.convert("L")
-        im = crop_whitespace_width(im)
-        im = Image.fromarray(im)
+        if crop_whitespace:
+            im = crop_whitespace_width(im)
+            im = Image.fromarray(im)
         if len(word) == longest_word_length:
             max_word_length_width = im.width
         fakes.append(im)
@@ -316,6 +322,7 @@ def build_fake_interp_N(
     text_encoder,
     longest_word_length,
     max_word_length_width,
+    crop_whitespace=True,
 ):
     fakes = []
     writer_1 = args.writer_1
@@ -341,8 +348,9 @@ def build_fake_interp_N(
         image = ema_sampled_images[i].squeeze(0)
         im = topil(image)
         im = im.convert("L")
-        im = crop_whitespace_width(im)
-        im = Image.fromarray(im)
+        if crop_whitespace:
+            im = crop_whitespace_width(im)
+            im = Image.fromarray(im)
         if len(word) == longest_word_length:
             max_word_length_width = im.width
         fakes.append(im)
