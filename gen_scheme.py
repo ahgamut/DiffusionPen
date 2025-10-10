@@ -18,7 +18,7 @@ from torch.nn import DataParallel
 from torchvision import transforms
 from transformers import CanineModel, CanineTokenizer
 from PIL import Image
-from skimage.filters import threshold_otsu
+import skimage.filters as skfilt
 
 #
 from models import UNetModel, ImageEncoder
@@ -43,7 +43,7 @@ class CTX:
 def save_threshed(img, fname):
     # thresh separately? use Otsu?
     # thresh here?
-    arr = np.array(img)
+    arr = np.array(img.convert("L"))
     thr = np.array(arr > skfilt.threshold_otsu(arr), dtype=np.uint8)
     thr = 255 * thr
     timg = Image.fromarray(thr).convert("L")

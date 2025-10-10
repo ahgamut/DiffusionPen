@@ -63,7 +63,7 @@ def build_placed_paragraph(
     conversion_factor = (font_size / units_per_em) * (dpi / 72)
 
     width_of_space = int(conversion_factor * placings[" "]["advance_width"])
-    height_of_line = int(conversion_factor * units_per_em)
+    height_of_line = int(1.05 * conversion_factor * units_per_em)
 
     cur_width = 0
     cur_line = []
@@ -94,7 +94,11 @@ def build_placed_paragraph(
         cur_line.append(wdata)
         cur_width += wdata["rsz"].width
 
-    para_height = (2 + len(lines)) * height_of_line
+    if len(cur_line) > 0:
+        lines.append(cur_line)
+        cur_line = []
+
+    para_height = (1 + len(lines)) * height_of_line
     para_width = max_line_width
     paragraph_image = Image.new(
         mode="RGB", size=(para_width, para_height), color="white"
