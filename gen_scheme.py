@@ -249,17 +249,15 @@ def resave_interp(xmlname, imgname, targname, widinfo, interp):
             max_word_length_width=max_word_length_width,
             **CTX.mldict,
         )
-        scaled_padded_words = add_rescale_padding(
+        regen_img = build_placed_paragraph(
             words,
             fakes,
-            max_word_length_width=max_word_length_width,
-            longest_word_length=longest_word_length,
-        )
-        regen_img = build_paragraph_image(
-            scaled_padded_words, max_line_width=max_line_width
+            max_line_width=max_line_width,
+            font_size=16,
+            dpi=300,
+            use_aspect=random.random() < 0.5,
         )
         save_threshed(regen_img, targname)
-
 
 def process_csv(fname, targdir):
     print("processing", fname)
