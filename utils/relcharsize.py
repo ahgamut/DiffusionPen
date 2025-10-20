@@ -4,6 +4,40 @@ from PIL import Image
 PUNCT_ST = set(",./;:'\"[]!@#$%^&*()-_+=\\|")
 
 
+def get_approx_bbox_size(word, placings, units_per_em, font_size=16, dpi=300):
+    width = 0
+    height = -1
+    ystart = -1
+    yend = 1e6
+
+    for ch in word:
+        plc = placings[ch]
+        width += plc["ink_width"]  # advance_width?
+        # height = max(height, plc["ink_height"])
+        ystart = max(ystart, plc["yMax"])
+        yend = min(yend, plc["yMin"])
+        height = max(height, ystart - yend)
+
+    # placings assume origin is bottom-left
+    # but, PIL assume origin is top-left
+    ystart = units_per_em - ystart
+
+    z = (font_size / units_per_em) * (dpi / 72)
+
+    pixwidth = int(width * z)
+    pixheight = int(height * z)
+    pixystart = int(ystart * z)
+
+    return dict(
+        ystart=ystart,
+        width=width,
+        height=height,
+        pixystart=pixystart,
+        pixwidth=pixwidth,
+        pixheight=pixheight,
+    )
+
+
 def get_resize_placed_word(
     word, img, placings, units_per_em, font_size=16, dpi=300, use_aspect=False
 ):
