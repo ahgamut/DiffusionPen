@@ -175,7 +175,7 @@ def resave_fake(xmlname, imgname, targname, faketype):
             fakes,
             max_line_width=max_line_width,
             font_size=font_size,
-            dpi=300,
+            dpi=600,
             use_aspect=use_aspect,
         )
     else:
@@ -254,7 +254,7 @@ def resave_interp(xmlname, imgname, targname, widinfo, interp):
             fakes,
             max_line_width=max_line_width,
             font_size=16,
-            dpi=300,
+            dpi=600,
             use_aspect=random.random() < 0.5,
         )
         save_threshed(regen_img, targname)

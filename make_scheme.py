@@ -302,8 +302,14 @@ def runner(
     # add target filenames to avoid dupe complaints
     for k, v in df_mapping.items():
         fill_renames(v, k)
-        print(k, "has", len(v), "entries")
-        v.to_csv(os.path.join(outdir, f"samp-{k}.csv"), header=True, index=False)
+        if k in ["clref", "qmreal", "qmfake"]:
+            print(k, "has", len(v), "entries")
+            v.to_csv(os.path.join(outdir, f"samp-{k}.csv"), header=True, index=False)
+        else:
+            print(k, "has", len(v), "entries, picking only 20")
+            subv = v.iloc[:20, :]
+            subv.to_csv(os.path.join(outdir, f"samp-{k}.csv"), header=True, index=False)
+
 
 
 def main():
