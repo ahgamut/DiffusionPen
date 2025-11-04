@@ -32,6 +32,8 @@ from utils.generation import (
     build_paragraph_image,
 )
 from utils.relcharsize import build_placed_paragraph
+from utils.relcharsize import build_bbox_place_paragraph
+from utils.relcharsize import get_possible_font_sizes
 from utils.subprompt import Word, Prompt
 from utils.arghandle import add_common_args
 
@@ -168,16 +170,27 @@ def resave_fake(xmlname, imgname, targname, faketype):
             scaled_padded_words, max_line_width=max_line_width
         )
     elif len(postparts) == 4:
-        font_size = int(postparts[2])
         use_aspect = postparts[3] == "img"
-        regen_img = build_placed_paragraph(
-            words,
-            fakes,
-            max_line_width=max_line_width,
-            font_size=font_size,
-            dpi=600,
-            use_aspect=use_aspect,
-        )
+        if postparts[2] == "rsp":
+            possible_font_sizes = get_possible_font_sizes(xpr.words, dpi=600)
+            regen_img = build_bbox_place_paragraph(
+                words,
+                fakes,
+                possible_font_sizes,
+                max_line_width=max_line_width,
+                dpi=600,
+                use_aspect=use_aspect,
+            )
+        else:
+            font_size = int(postparts[2])
+            regen_img = build_placed_paragraph(
+                words,
+                fakes,
+                max_line_width=max_line_width,
+                font_size=font_size,
+                dpi=600,
+                use_aspect=use_aspect,
+            )
     else:
         raise RuntimeError("invalid post-processing:" + faketype)
 
@@ -258,6 +271,7 @@ def resave_interp(xmlname, imgname, targname, widinfo, interp):
             use_aspect=random.random() < 0.5,
         )
         save_threshed(regen_img, targname)
+
 
 def process_csv(fname, targdir):
     print("processing", fname)
@@ -438,6 +452,8 @@ def main():
     CTX.mldict["tokenizer"] = tokenizer
     CTX.mldict["text_encoder"] = text_encoder
     CTX.mldict["args"] = args
+    with open("utils/char_placing.json", "r") as fp:
+        CTX.mldict["cpj"] = json.load(fp)
     IAM_TempLoader.check_preload()
 
     ####

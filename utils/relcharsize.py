@@ -1,5 +1,8 @@
 import json
+import random
+import numpy as np
 from PIL import Image
+
 
 PUNCT_ST = set(",./;:'\"[]!@#$%^&*()-_+=\\|")
 
@@ -110,6 +113,109 @@ def build_placed_paragraph(
         wdata = get_resize_placed_word(
             word, img, placings, units_per_em, font_size, dpi, use_aspect
         )
+
+        if wdata["punct"]:
+            if cur_width + wdata["rsz"].width > max_line_width:
+                lines.append(cur_line)
+                cur_line = []
+                cur_width = 0
+        else:
+            if cur_width + width_of_space + wdata["rsz"].width > max_line_width:
+                lines.append(cur_line)
+                cur_line = []
+                cur_width = 0
+
+        if not wdata["punct"]:
+            cur_width += width_of_space
+
+        cur_line.append(wdata)
+        cur_width += wdata["rsz"].width
+
+    if len(cur_line) > 0:
+        lines.append(cur_line)
+        cur_line = []
+
+    para_height = (1 + len(lines)) * height_of_line
+    para_width = max_line_width
+    paragraph_image = Image.new(
+        mode="RGB", size=(para_width, para_height), color="white"
+    )
+
+    for i, line in enumerate(lines):
+        pl_ystart = i * height_of_line
+        cur_width = 0
+        for wdata in line:
+            if not wdata["punct"]:
+                cur_width += width_of_space
+            paragraph_image.paste(
+                wdata["rsz"], (cur_width, pl_ystart + wdata["ystart"])
+            )
+            cur_width += wdata["rsz"].width
+
+    paragraph_image = paragraph_image.convert("L")
+    return paragraph_image
+
+
+def get_possible_font_sizes(origs, dpi=600):
+    with open("utils/char_placing.json", "r") as fp:
+        cpj = json.load(fp)
+
+    units_per_em = cpj["upm"]
+    placings = cpj["glyphs"]
+
+    pfs = []
+
+    for i in range(len(origs)):
+        orig = origs[i]
+        bbox = get_approx_bbox_size(
+            orig.raw, placings, units_per_em, font_size=16, dpi=dpi
+        )
+        # conversion_factor = (font_size / units_per_em) * (dpi / 72)
+        pixheight = orig.height  # height * (font_size / units_per_em) * (dpi / 72)
+        pixwidth = orig.width  # width * (font_size / units_per_em) * (dpi / 72)
+        fsize0 = pixheight * (72 / dpi) * (units_per_em / bbox["height"])
+        pfs.append(fsize0)
+        fsize1 = pixwidth * (72 / dpi) * (units_per_em / bbox["width"])
+        pfs.append(fsize1)
+
+    possible_font_sizes = np.array(pfs)
+    lb_1 = possible_font_sizes >= np.percentile(possible_font_sizes, 5)
+    ub_0 = possible_font_sizes <= np.percentile(possible_font_sizes, 95)
+    possible_font_sizes = possible_font_sizes[(lb_1 & ub_0)]
+    possible_font_sizes = possible_font_sizes.tolist()
+    return possible_font_sizes
+
+
+def build_bbox_place_paragraph(
+    words, fakes, possible_font_sizes, max_line_width=900, dpi=300, use_aspect=True
+):
+    assert len(words) == len(fakes)
+    N = len(words)
+    with open("utils/char_placing.json", "r") as fp:
+        cpj = json.load(fp)
+
+    units_per_em = cpj["upm"]
+    placings = cpj["glyphs"]
+
+    mean_font_size = np.mean(possible_font_sizes)
+    print("mean font size is", mean_font_size)
+    mean_conversion_factor = (font_size / units_per_em) * (dpi / 72)
+    height_of_line = int(1.05 * mean_conversion_factor * units_per_em)
+
+    cur_width = 0
+    cur_line = []
+
+    lines = []
+
+    for i in range(N):
+        word = words[i]
+        img = fakes[i]  # this has been thru crop_whitespace_width
+        font_size = random.choice(possible_font_sizes)
+        conversion_factor = (font_size / units_per_em) * (dpi / 72)
+        wdata = get_resize_placed_word(
+            word, img, placings, units_per_em, font_size, dpi, use_aspect
+        )
+        width_of_space = int(conversion_factor * placings[" "]["advance_width"])
 
         if wdata["punct"]:
             if cur_width + wdata["rsz"].width > max_line_width:
