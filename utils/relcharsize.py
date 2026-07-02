@@ -199,7 +199,7 @@ def build_bbox_place_paragraph(
 
     mean_font_size = np.mean(possible_font_sizes)
     print("mean font size is", mean_font_size)
-    mean_conversion_factor = (font_size / units_per_em) * (dpi / 72)
+    mean_conversion_factor = (mean_font_size / units_per_em) * (dpi / 72)
     height_of_line = int(1.05 * mean_conversion_factor * units_per_em)
 
     cur_width = 0

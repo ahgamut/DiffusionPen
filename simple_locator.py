@@ -57,8 +57,8 @@ class WordLocationDataset(Dataset):
             self.windex_forward[w] = i
             self.windex_backward[i] = w
 
-        self.charmap = {x: i for (i, x) in enumerate(self.char_classes)}
         self.char_classes = get_default_character_classes()
+        self.charmap = {x: i for (i, x) in enumerate(self.char_classes)}
         self.dummies = [len(self.charmap) - 1] * 40
 
     def __len__(self):

@@ -659,7 +659,7 @@ def main():
         )
 
     elif args.mode == "triplet":
-        train(
+        train_triplet(
             model,
             train_loader,
             val_loader,
