@@ -530,12 +530,12 @@ def load_pretrained_weights(model, device, pretrained, style_path):
             sum([p.data.nelement() for p in model.parameters()])
         )
     )
-    if pretrained == True:
+    if pretrained:
         assert style_path != "", "need to provide style_path"
-        state_dict = torch.load(style_path, map_location=device, weights_only=True)
+        style_state_dict = torch.load(style_path, map_location=device, weights_only=True)
         model_dict = model.state_dict()
         sub_dict = dict()
-        for k, v in state_dict.items():
+        for k, v in style_state_dict.items():
             if k in model_dict and model_dict[k].shape == v.shape:
                 sub_dict[k] = v
             else:
@@ -594,7 +594,7 @@ def main():
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
 
     # ========= Data augmentation and normalization for training =====#
-    if os.path.exists(args.save_path) == False:
+    if not os.path.exists(args.save_path):
         os.makedirs(args.save_path)
 
     if args.dataset == "iam":

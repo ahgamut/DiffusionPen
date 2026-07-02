@@ -194,7 +194,7 @@ def main():
         raise RuntimeError(f"{args.dataset}: can't load dataset!")
     train_loader, test_loader = get_loaders(dset, args.batch_size)
 
-    if args.dataparallel == True:
+    if args.dataparallel :
         device_ids = [3, 4]
         print("using dataparallel with device:", device_ids)
     else:

@@ -221,7 +221,7 @@ def train(
             else:
                 style_features = None
 
-            if args.latent == True:
+            if args.latent :
                 images = vae.module.encode(
                     images.to(torch.float32)
                 ).latent_dist.sample()
@@ -316,10 +316,10 @@ def load_style_weights(model, device, style_path):
             sum([p.data.nelement() for p in model.parameters()])
         )
     )
-    state_dict = torch.load(style_path, map_location=device, weights_only=True)
+    style_state_dict = torch.load(style_path, map_location=device, weights_only=True)
     model_dict = model.state_dict()
     sub_dict = dict()
-    for k, v in state_dict.items():
+    for k, v in style_state_dict.items():
         if k in model_dict and model_dict[k].shape == v.shape:
             sub_dict[k] = v
         else:
@@ -331,7 +331,7 @@ def load_style_weights(model, device, style_path):
 
 def main():
     """Main function"""
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser("diffusionpen-train")
     parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--batch-size", type=int, default=320)
     parser.add_argument("--num-workers", type=int, default=4)
@@ -391,7 +391,7 @@ def main():
     vocab_size = len(character_classes)
     print("Vocab size: ", vocab_size)
 
-    if args.dataparallel == True:
+    if args.dataparallel :
         device_ids = [3, 4]
         print("using dataparallel with device:", device_ids)
     else:
@@ -437,7 +437,7 @@ def main():
 
     # load from last checkpoint
 
-    if args.load_check == True:
+    if args.load_check :
         unet.load_state_dict(
             torch.load(f"{args.save_path}/models/ckpt.pt", weights_only=True)
         )
@@ -449,7 +449,7 @@ def main():
         )
         print("Loaded models and optimizer")
 
-    if args.latent == True:
+    if args.latent :
         print("VAE is true")
         vae = AutoencoderKL.from_pretrained(args.stable_dif_path, subfolder="vae")
         vae = DataParallel(vae, device_ids=device_ids)

@@ -19,9 +19,9 @@ def setup_logging(args):
 
 def save_image_grid(images, path, args, **kwargs):
     grid = torchvision.utils.make_grid(images, padding=0, **kwargs)
-    if args.latent == True:
+    if args.latent:
         im = torchvision.transforms.ToPILImage()(grid)
-        if args.color == False:
+        if not args.color:
             im = im.convert("L")
         else:
             im = im.convert("RGB")

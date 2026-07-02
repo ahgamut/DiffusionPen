@@ -201,7 +201,7 @@ def train(
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser("placer-train")
     parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--batch-size", type=int, default=320)
     parser.add_argument("--num-workers", type=int, default=4)
@@ -246,7 +246,7 @@ def main():
     vocab_size = len(character_classes)
     print("Vocab size: ", vocab_size)
 
-    if args.dataparallel == True:
+    if args.dataparallel :
         device_ids = [3, 4]
         print("using dataparallel with device:", device_ids)
     else:
@@ -281,12 +281,12 @@ def main():
     loss_fn = custom_loss(0.01, alpha=1.0, beta=5.0)
 
     # load from last checkpoint
-    if args.load_check == True:
+    if args.load_check :
         unet.load_state_dict(
             torch.load(f"{args.save_path}/models/ckpt.pt", weights_only=True)
         )
 
-    if args.latent == True:
+    if args.latent :
         print("VAE is true")
         vae = AutoencoderKL.from_pretrained(args.stable_dif_path, subfolder="vae")
         vae = DataParallel(vae, device_ids=device_ids)

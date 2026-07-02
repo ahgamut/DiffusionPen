@@ -162,7 +162,7 @@ def train(
 
 
 def main():
-    parser = argparse.ArgumentParser("locator-train")
+    parser = argparse.ArgumentParser("simple-locator")
     parser.add_argument("-b", "--batch-size", type=int, default=10, help="size")
     parser.add_argument("-e", "--epochs", default=10, type=int, help="epochs")
     parser.add_argument("--char-features", default=8, type=int, help="char features")
@@ -175,7 +175,7 @@ def main():
         raise RuntimeError(f"{args.dataset}: can't load dataset!")
     train_loader, test_loader = get_loaders(dset, args.batch_size)
 
-    if args.dataparallel == True:
+    if args.dataparallel :
         device_ids = [3, 4]
         print("using dataparallel with device:", device_ids)
     else:
