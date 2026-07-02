@@ -1,27 +1,16 @@
 import os
 import torch
 import numpy as np
-from PIL import Image
 import argparse
 
 #
 from utils.generation import (
     setup_logging,
     build_fake_interp_1,
+    stack_images,
 )
 from utils.arghandle import add_common_args
 from utils.model_setup import load_models
-
-
-def img_concat(imgs):
-    w = max(x.width for x in imgs)
-    h = sum(x.height for x in imgs)
-    dst = Image.new("RGB", (w, h))
-    ch = 0
-    for img in imgs:
-        dst.paste(img, (0, ch))
-        ch += img.height
-    return dst
 
 
 def main():
@@ -74,7 +63,7 @@ def main():
                     text_encoder=text_encoder,
                 )
                 imgs.append(im)
-            dst = img_concat(imgs)
+            dst = stack_images(imgs)
             dst.save(
                 os.path.join(
                     args.output,

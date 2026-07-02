@@ -177,6 +177,18 @@ def build_paragraph_image(
     return paragraph_image
 
 
+def stack_images(images, margin=0, background="white"):
+    """Stack PIL images vertically with optional uniform margin between and around them."""
+    res_width = max(img.width for img in images) + 2 * margin
+    res_height = sum(img.height for img in images) + margin * (len(images) + 1)
+    dst = Image.new("RGB", (res_width, res_height), color=background)
+    ch = margin
+    for img in images:
+        dst.paste(img, (margin, ch))
+        ch += img.height + margin
+    return dst
+
+
 #####
 # using the model
 #####
