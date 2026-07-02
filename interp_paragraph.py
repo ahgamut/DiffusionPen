@@ -9,14 +9,8 @@ from utils.generation import (
     build_fake_interp_N,
     build_paragraph_image,
 )
-from utils.arghandle import add_common_args
+from utils.arghandle import add_common_args, file_check
 from utils.model_setup import load_models
-
-
-def file_check(fname):
-    if os.path.isfile(fname):
-        return fname
-    raise RuntimeError(f"{fname} is not a file")
 
 
 def main():

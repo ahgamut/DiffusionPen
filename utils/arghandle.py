@@ -1,4 +1,20 @@
 #
+import os
+
+
+def file_check(fname):
+    if os.path.isfile(fname):
+        return fname
+    raise RuntimeError(f"{fname} is not a file")
+
+
+def range_check(x):
+    l, u = x.split("-")
+    l = int(l)
+    u = int(u)
+    if l < 0 or u < 0 or l > u:
+        raise RuntimeError(f"invalid range: {x}")
+    return (l, u)
 
 
 def add_common_args(parser):
