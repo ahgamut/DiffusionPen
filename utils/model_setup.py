@@ -1,0 +1,109 @@
+import copy
+import torch
+import torch.nn as nn
+import torchvision
+from torch.nn import DataParallel
+from torchvision import transforms
+from diffusers import AutoencoderKL, DDIMScheduler
+from transformers import CanineModel, CanineTokenizer
+
+from models import UNetModel, ImageEncoder, Diffusion
+from utils.auxiliary_functions import get_default_character_classes
+
+
+def load_models(args):
+    character_classes = get_default_character_classes()
+    vocab_size = len(character_classes)
+    style_classes = 339  # IAM Dataset
+
+    idx = int("".join(filter(str.isdigit, args.device)))
+    device_ids = [idx, idx + 1] if args.dataparallel else [idx]
+
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    ])
+
+    tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
+    text_encoder = CanineModel.from_pretrained("google/canine-c")
+    text_encoder = nn.DataParallel(text_encoder, device_ids=device_ids)
+    text_encoder = text_encoder.to(args.device)
+
+    unet = UNetModel(
+        image_size=args.img_size,
+        in_channels=args.channels,
+        model_channels=args.emb_dim,
+        out_channels=args.channels,
+        num_res_blocks=args.num_res_blocks,
+        attention_resolutions=(1, 1),
+        channel_mult=(1, 1),
+        num_heads=args.num_heads,
+        num_classes=style_classes,
+        context_dim=args.emb_dim,
+        vocab_size=vocab_size,
+        text_encoder=text_encoder,
+        args=args,
+    )
+    unet = DataParallel(unet, device_ids=device_ids)
+    unet = unet.to(args.device)
+
+    diffusion = Diffusion(img_size=args.img_size, args=args)
+
+    if args.latent:
+        vae = AutoencoderKL.from_pretrained(args.stable_dif_path, subfolder="vae")
+        vae = DataParallel(vae, device_ids=device_ids)
+        vae = vae.to(args.device)
+        vae.requires_grad_(False)
+    else:
+        vae = None
+
+    ddim = DDIMScheduler.from_pretrained(args.stable_dif_path, subfolder="scheduler")
+
+    feature_extractor = ImageEncoder(
+        model_name="mobilenetv2_100", num_classes=0, pretrained=True, trainable=True
+    )
+    style_state_dict = torch.load(
+        args.style_path, map_location=args.device, weights_only=True
+    )
+    model_dict = feature_extractor.state_dict()
+    style_state_dict = {
+        k: v
+        for k, v in style_state_dict.items()
+        if k in model_dict and model_dict[k].shape == v.shape
+    }
+    model_dict.update(style_state_dict)
+    feature_extractor.load_state_dict(model_dict)
+    feature_extractor = DataParallel(feature_extractor, device_ids=device_ids)
+    feature_extractor = feature_extractor.to(args.device)
+    feature_extractor.requires_grad_(False)
+    feature_extractor.eval()
+
+    unet.load_state_dict(
+        torch.load(
+            f"{args.save_path}/models/ckpt.pt",
+            map_location=args.device,
+            weights_only=True,
+        )
+    )
+    unet.eval()
+
+    ema_model = copy.deepcopy(unet).eval().requires_grad_(False)
+    ema_model.load_state_dict(
+        torch.load(
+            f"{args.save_path}/models/ema_ckpt.pt",
+            map_location=args.device,
+            weights_only=True,
+        )
+    )
+    ema_model.eval()
+
+    return {
+        "transform": transform,
+        "tokenizer": tokenizer,
+        "text_encoder": text_encoder,
+        "diffusion": diffusion,
+        "ema_model": ema_model,
+        "vae": vae,
+        "ddim": ddim,
+        "feature_extractor": feature_extractor,
+    }
