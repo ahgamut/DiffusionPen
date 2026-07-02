@@ -1,42 +1,18 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset
 import sys
 import os
 import argparse
 from transformers import CanineModel, CanineTokenizer
 
 #
+from models import AvgMeter
 from utils.placer_iam import RelWordIndices
 from utils.subprompt import Word
 from utils.arghandle import add_common_args
 from utils.auxiliary_functions import get_default_character_classes
-
-#
-
-ALL_CAPS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-STICK_UP = set("bdfhklt'\"!?")  # expect these to increase height upwards
-STICK_DN = set("fgjpqy,.;")  # expect these to increase height downwards
-PUNCT_ST = set(",./;:'\"[]!@#$%^&*()-_+=\\|")
-NUMBERS = set("0123456789")
-
-
-class AvgMeter:
-    def __init__(self, name="Metric"):
-        self.name = name
-        self.reset()
-
-    def reset(self):
-        self.avg, self.sum, self.count = [0] * 3
-
-    def update(self, val, count=1):
-        self.count += count
-        self.sum += val * count
-        self.avg = self.sum / self.count
-
-    def __repr__(self):
-        text = f"{self.name}: {self.avg:.4f}"
-        return text
+from utils.training_utils import custom_loss, get_loaders
 
 
 def stick(w, ws):
@@ -111,27 +87,6 @@ class SimpleLocator(nn.Module):
         xf = self.ac(self.l1(xf))
         xf = self.ac(self.l2(xf))
         return xf
-
-
-def get_loaders(dset, batch_size):
-    train_size = int(0.8 * len(dset))
-    test_size = len(dset) - train_size
-    train_data, test_data = random_split(dset, [train_size, test_size])
-    train_loader = DataLoader(
-        train_data,
-        shuffle=True,
-        num_workers=2,
-        batch_size=batch_size,
-        collate_fn=dset.collate_fn,
-    )
-    test_loader = DataLoader(
-        test_data,
-        shuffle=True,
-        num_workers=2,
-        batch_size=batch_size,
-        collate_fn=dset.collate_fn,
-    )
-    return train_loader, test_loader
 
 
 def train_epoch(model, loader, loss_fn, optimizer, loss_meter, args):
@@ -210,16 +165,6 @@ def train(
                 optimizer.state_dict(),
                 os.path.join(wts_dir, "models", "simloc_optim.pt"),
             )
-
-
-def custom_loss(out=1.0, alpha=0.5, beta=2.0):
-    def fn(pred, target):
-        l2 = nn.functional.mse_loss(pred, target, reduction="none")
-        small = alpha * l2[l2 <= out].sum()
-        big = beta * l2[l2 > out].sum()
-        return big + small
-
-    return fn
 
 
 def main():

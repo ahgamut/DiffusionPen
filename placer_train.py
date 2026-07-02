@@ -18,6 +18,7 @@ from utils.placer_iam import IAMPlacerDataset
 from utils.auxiliary_functions import *
 from utils.generation import setup_logging
 from utils.arghandle import add_common_args
+from utils.training_utils import custom_loss
 
 
 def frz(model):
@@ -218,16 +219,6 @@ def train(
                 optimizer.state_dict(),
                 os.path.join(args.save_path, "models", "placer_optim.pt"),
             )
-
-
-def custom_loss(out=1.0, alpha=0.5, beta=2.0):
-    def fn(pred, target):
-        l2 = nn.functional.mse_loss(pred, target, reduction="none")
-        small = alpha * l2[l2 <= out].sum()
-        big = beta * l2[l2 > out].sum()
-        return big + small
-
-    return fn
 
 
 def main():

@@ -6,35 +6,11 @@ import os
 import argparse
 
 #
+from models import AvgMeter
 from utils.placer_iam import RelWordIndices
 from utils.subprompt import Word
 from utils.arghandle import add_common_args
-
-#
-
-ALL_CAPS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-STICK_UP = set("bdfhklt'\"!?")  # expect these to increase height upwards
-STICK_DN = set("fgjpqy,.;")  # expect these to increase height downwards
-PUNCT_ST = set(",./;:'\"[]!@#$%^&*()-_+=\\|")
-NUMBERS = set("0123456789")
-
-
-class AvgMeter:
-    def __init__(self, name="Metric"):
-        self.name = name
-        self.reset()
-
-    def reset(self):
-        self.avg, self.sum, self.count = [0] * 3
-
-    def update(self, val, count=1):
-        self.count += count
-        self.sum += val * count
-        self.avg = self.sum / self.count
-
-    def __repr__(self):
-        text = f"{self.name}: {self.avg:.4f}"
-        return text
+from utils.training_utils import custom_loss
 
 
 def stick(w, ws):
@@ -204,16 +180,6 @@ def train(
                 optimizer.state_dict(),
                 os.path.join(wts_dir, "models", "simplace_optim.pt"),
             )
-
-
-def custom_loss(out=1.0, alpha=0.5, beta=2.0):
-    def fn(pred, target):
-        l2 = nn.functional.mse_loss(pred, target, reduction="none")
-        small = alpha * l2[l2 <= out].sum()
-        big = beta * l2[l2 > out].sum()
-        return big + small
-
-    return fn
 
 
 def main():
