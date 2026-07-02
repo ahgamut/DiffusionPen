@@ -15,7 +15,7 @@ import torch.optim as optim
 #
 from models import UNetModel, ImageEncoder, EMA, Diffusion, HorizontalPlacer, AvgMeter
 from utils.placer_iam import IAMPlacerDataset
-from utils.auxilary_functions import *
+from utils.auxiliary_functions import *
 from utils.generation import setup_logging
 from utils.arghandle import add_common_args
 

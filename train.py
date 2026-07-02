@@ -19,7 +19,7 @@ from models import UNetModel, ImageEncoder, EMA, Diffusion, AvgMeter
 from utils.cvl_dataset import CVLDataset
 from utils.iam_dataset import IAMDataset
 from utils.GNHK_dataset import GNHK_Dataset
-from utils.auxilary_functions import *
+from utils.auxiliary_functions import *
 from utils.generation import save_image_grid, setup_logging
 from utils.arghandle import add_common_args
 

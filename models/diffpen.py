@@ -7,7 +7,7 @@ import random
 from torchvision import transforms
 
 #
-from .auxiliary_functions import (
+from utils.auxiliary_functions import (
     image_resize_PIL,
     centered_PIL,
 )

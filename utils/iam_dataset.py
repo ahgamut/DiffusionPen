@@ -5,7 +5,7 @@ import string
 
 #
 from utils.word_dataset import WordLineDataset
-from utils.auxilary_functions import (
+from utils.auxiliary_functions import (
     image_resize_PIL,
     centered_PIL,
 )

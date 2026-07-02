@@ -8,7 +8,7 @@ import struct
 from dataclasses import dataclass
 
 #
-from utils.auxilary_functions import (
+from utils.auxiliary_functions import (
     image_resize_PIL,
     centered_PIL,
 )

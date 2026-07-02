@@ -13,7 +13,7 @@ from utils.style_dataset import (
     IAMStyleDataset,
 )
 from utils.cvl_dataset import CVLStyleDataset
-from utils.auxilary_functions import (
+from utils.auxiliary_functions import (
     affine_transformation,
 )
 from models import Mixed_Encoder, AvgMeter

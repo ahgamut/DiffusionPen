@@ -10,7 +10,7 @@ from transformers import CanineModel, CanineTokenizer
 from utils.placer_iam import RelWordIndices
 from utils.subprompt import Word
 from utils.arghandle import add_common_args
-from utils.auxilary_functions import get_default_character_classes
+from utils.auxiliary_functions import get_default_character_classes
 
 #
 

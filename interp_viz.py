@@ -16,7 +16,7 @@ from transformers import CanineModel, CanineTokenizer
 #
 from models import UNetModel, ImageEncoder
 from models.diffpen2 import Diffusion
-from utils.auxilary_functions import *
+from utils.auxiliary_functions import *
 from utils.generation import (
     setup_logging,
     crop_whitespace_width,
