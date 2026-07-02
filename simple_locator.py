@@ -1,10 +1,8 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
-import sys
 import os
 import argparse
-from transformers import CanineModel, CanineTokenizer
 
 #
 from models import AvgMeter
@@ -13,10 +11,6 @@ from utils.subprompt import Word
 from utils.arghandle import add_common_args
 from utils.auxiliary_functions import get_default_character_classes
 from utils.training_utils import custom_loss, get_loaders
-
-
-def stick(w, ws):
-    return float(len(w & ws) > 0) - 0.5
 
 
 class WordLocationDataset(Dataset):

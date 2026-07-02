@@ -5,15 +5,13 @@ from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 from transformers import CanineModel, CanineTokenizer
 import argparse
-import copy
 import numpy as np
 import os
 import torch
 import torch.nn as nn
-import torch.optim as optim
 
 #
-from models import UNetModel, ImageEncoder, EMA, Diffusion, HorizontalPlacer, AvgMeter
+from models import UNetModel, ImageEncoder, HorizontalPlacer, AvgMeter
 from utils.placer_iam import IAMPlacerDataset
 from utils.auxiliary_functions import *
 from utils.generation import setup_logging
@@ -60,9 +58,7 @@ def load_style_weights(model, device, style_path):
 
 def train_epoch(
     placer,
-    diffusion,
     tokenizer,
-    vae,
     optimizer,
     train_loader,
     loss_fn,
@@ -112,7 +108,7 @@ def train_epoch(
 
 
 def val_epoch(
-    placer, diffusion, tokenizer, vae, test_loader, loss_fn, loss_meter, args
+    placer, tokenizer, test_loader, loss_fn, loss_meter, args
 ):
     placer.eval()
     for i, data in enumerate(test_loader):
@@ -163,26 +159,13 @@ def val_epoch(
 
 def train(
     placer,
-    diffusion,
-    model,
-    ema,
-    ema_model,
-    vae,
     optimizer,
     loss_fn,
     train_loader,
     test_loader,
-    num_classes,
-    style_extractor,
-    vocab_size,
-    noise_scheduler,
-    transforms,
     args,
     tokenizer=None,
-    text_encoder=None,
-    lr_scheduler=None,
 ):
-    model.train()
     loss_meter = AvgMeter("MSE")
     print("Training started....")
 
@@ -190,9 +173,7 @@ def train(
         print("Epoch:", epoch)
         train_epoch(
             placer=placer,
-            diffusion=diffusion,
             tokenizer=tokenizer,
-            vae=vae,
             optimizer=optimizer,
             train_loader=train_loader,
             loss_fn=loss_fn,
@@ -203,9 +184,7 @@ def train(
         if epoch % 10 == 0:
             val_epoch(
                 placer=placer,
-                diffusion=diffusion,
                 tokenizer=tokenizer,
-                vae=vae,
                 test_loader=test_loader,
                 loss_fn=loss_fn,
                 loss_meter=loss_meter,
@@ -300,18 +279,11 @@ def main():
     unet = unet.to(args.device)
 
     loss_fn = custom_loss(0.01, alpha=1.0, beta=5.0)
-    diffusion = Diffusion(img_size=args.img_size, args=args)
-
-    ema = EMA(0.995)
-    ema_model = copy.deepcopy(unet)
 
     # load from last checkpoint
     if args.load_check == True:
         unet.load_state_dict(
             torch.load(f"{args.save_path}/models/ckpt.pt", weights_only=True)
-        )
-        ema_model.load_state_dict(
-            torch.load(f"{args.save_path}/models/ema_ckpt.pt", weights_only=True)
         )
 
     if args.latent == True:
@@ -360,29 +332,16 @@ def main():
     frz(vae)
     frz(text_encoder)
     frz(feature_extractor)
-    frz(ema_model)
 
     #
     train(
         placer=placer,
-        diffusion=diffusion,
-        model=unet,
-        ema=ema,
-        ema_model=ema_model,
-        vae=vae,
         optimizer=optimizer,
         loss_fn=loss_fn,
         train_loader=train_loader,
         test_loader=test_loader,
-        num_classes=style_classes,
-        style_extractor=feature_extractor,
-        vocab_size=vocab_size,
-        noise_scheduler=ddim,
-        transforms=train_transform,
         args=args,
         tokenizer=tokenizer,
-        text_encoder=text_encoder,
-        lr_scheduler=None,
     )
 
 

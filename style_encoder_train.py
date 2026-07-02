@@ -433,7 +433,6 @@ def train_triplet(
 
 def build_IAMDataset(args):
     dataset_folder = args.data_path
-    aug_transforms = [lambda x: affine_transformation(x, s=0.1)]
     train_transform = transforms.Compose(
         [
             transforms.ToTensor(),

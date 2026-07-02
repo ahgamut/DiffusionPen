@@ -35,20 +35,6 @@ cdict = {c: i for i, c in enumerate(c_classes)}
 icdict = {i: c for i, c in enumerate(c_classes)}
 
 
-### Borrowed from GANwriting ###
-def label_padding(labels, num_tokens):
-    new_label_len = []
-    ll = [letter2index[i] for i in labels]
-    new_label_len.append(len(ll) + 2)
-    ll = np.array(ll) + num_tokens
-    ll = list(ll)
-    # ll = [tokens["GO_TOKEN"]] + ll + [tokens["END_TOKEN"]]
-    num = OUTPUT_MAX_LEN - len(ll)
-    if not num == 0:
-        ll.extend([tokens["PAD_TOKEN"]] * num)  # replace PAD_TOKEN
-    return ll
-
-
 def labelDictionary():
     labels = list(c_classes)
     letter2index = {label: n for n, label in enumerate(labels)}
@@ -130,7 +116,7 @@ def build_IAMDataset(args, transform):
 
 def build_GNHKDataset(args, transform):
     myDataset = GNHK_Dataset
-    dataset_folder = "path/to/GNHK"
+    dataset_folder = args.gnhk_path
     style_classes = 515
     train_transform = transforms.Compose(
         [
@@ -255,9 +241,6 @@ def train(
             x_t = noisy_images
             t = timesteps
 
-            if np.random.random() < 0.1:
-                labels = None
-
             predicted_noise = model(
                 x_t,
                 timesteps=t,
@@ -289,54 +272,28 @@ def train(
             labels = torch.arange(16).long().to(args.device)
             n = len(labels)
 
-            if True:
-                # generates the word "text" in 16 different styles
-                words = ["text", "sample", "images"]
-                for x_text in words:
-                    # TODO: check when this is called
-                    ema_sampled_images = diffusion.sampling(
-                        ema_model,
-                        vae,
-                        n=n,
-                        x_text=x_text,
-                        labels=labels,
-                        args=args,
-                        style_extractor=style_extractor,
-                        noise_scheduler=noise_scheduler,
-                        transform=transforms,
-                        tokenizer=tokenizer,
-                        text_encoder=text_encoder,
-                    )
-
-                    epoch_n = epoch
-                    sampled_ema = save_image_grid(
-                        ema_sampled_images,
-                        os.path.join(
-                            args.save_path, "images", f"{epoch_n:04d}_{x_text}_ema.jpg"
-                        ),
-                        args,
-                    )
-            else:
-                # generates a batch of words
-                ema_sampled_images = diffusion.sampling_loader(
+            words = ["text", "sample", "images"]
+            for x_text in words:
+                ema_sampled_images = diffusion.sampling(
                     ema_model,
-                    test_loader,
                     vae,
                     n=n,
-                    x_text=None,
+                    x_text=x_text,
                     labels=labels,
                     args=args,
                     style_extractor=style_extractor,
                     noise_scheduler=noise_scheduler,
                     transform=transforms,
-                    character_classes=None,
                     tokenizer=tokenizer,
                     text_encoder=text_encoder,
                 )
+
                 epoch_n = epoch
                 sampled_ema = save_image_grid(
                     ema_sampled_images,
-                    os.path.join(args.save_path, "images", f"{epoch_n}_ema.jpg"),
+                    os.path.join(
+                        args.save_path, "images", f"{epoch_n:04d}_{x_text}_ema.jpg"
+                    ),
                     args,
                 )
 
@@ -380,6 +337,7 @@ def main():
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--level", type=str, default="word", help="word, line")
     parser.add_argument("--style-name", default="mobilenetv2_100", type=str)
+    parser.add_argument("--gnhk-path", type=str, default="", help="path to GNHK dataset root")
     add_common_args(parser)
     args = parser.parse_args()
 
