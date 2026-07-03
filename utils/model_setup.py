@@ -7,7 +7,9 @@ from torchvision import transforms
 from diffusers import AutoencoderKL, DDIMScheduler
 from transformers import CanineModel, CanineTokenizer
 
-from models import UNetModel, ImageEncoder, Diffusion
+import os
+
+from models import UNetModel, ImageEncoder, Diffusion, WordPlacer
 from utils.auxiliary_functions import get_default_character_classes
 
 
@@ -97,6 +99,21 @@ def load_models(args):
     )
     ema_model.eval()
 
+    # Optional autoregressive word placer (learned placement). Absent -> None,
+    # and callers fall back to the heuristic layout with no regression.
+    placer = None
+    placer_path = getattr(args, "placer_path", None)
+    if placer_path and os.path.isfile(placer_path):
+        placer = WordPlacer(num_writers=style_classes)
+        placer = DataParallel(placer, device_ids=device_ids)
+        placer.load_state_dict(
+            torch.load(placer_path, map_location=args.device, weights_only=True)
+        )
+        placer = placer.to(args.device)
+        placer.eval()
+        placer.requires_grad_(False)
+        print("loaded word placer from", placer_path)
+
     return {
         "transform": transform,
         "tokenizer": tokenizer,
@@ -106,4 +123,5 @@ def load_models(args):
         "vae": vae,
         "ddim": ddim,
         "feature_extractor": feature_extractor,
+        "placer": placer,
     }

@@ -8,6 +8,7 @@ from utils.generation import (
     build_fake_image_N,
     add_rescale_padding,
     build_paragraph_image,
+    place_words_learned,
 )
 from utils.arghandle import add_common_args, file_check
 from utils.model_setup import load_models
@@ -20,6 +21,18 @@ def main():
     parser.add_argument("-o", "--output", type=str, default="./output.png")
     parser.add_argument(
         "--max-line-width", default=900, type=int, help="max line width"
+    )
+    parser.add_argument(
+        "--placement",
+        choices=["heuristic", "learned"],
+        default="heuristic",
+        help="word layout: font-metric heuristic or learned WordPlacer",
+    )
+    parser.add_argument(
+        "--placer-path",
+        type=str,
+        default=None,
+        help="checkpoint for the learned WordPlacer (required for --placement learned)",
     )
     add_common_args(parser)
 
@@ -39,6 +52,7 @@ def main():
     transform = m["transform"]
     tokenizer = m["tokenizer"]
     text_encoder = m["text_encoder"]
+    placer = m["placer"]
 
     # make the code to generate lines
     lines = open(args.text_file).read()
@@ -65,18 +79,34 @@ def main():
         max_word_length_width=max_word_length_width,
     )
 
-    # Scale and pad each word
-    scaled_padded_words = add_rescale_padding(
-        words,
-        fakes,
-        max_word_length_width=max_word_length_width,
-        longest_word_length=longest_word_length,
-    )
+    if args.placement == "learned":
+        if placer is None:
+            raise RuntimeError(
+                "--placement learned requires --placer-path to a valid checkpoint"
+            )
+        paragraph_image = place_words_learned(
+            words,
+            fakes,
+            writer_id=s,
+            placer=placer,
+            tokenizer=tokenizer,
+            text_encoder=text_encoder,
+            args=args,
+            max_line_width=max_line_width,
+        )
+    else:
+        # Scale and pad each word
+        scaled_padded_words = add_rescale_padding(
+            words,
+            fakes,
+            max_word_length_width=max_word_length_width,
+            longest_word_length=longest_word_length,
+        )
 
-    # combine to create paragraph
-    paragraph_image = build_paragraph_image(
-        scaled_padded_words, max_line_width=max_line_width
-    )
+        # combine to create paragraph
+        paragraph_image = build_paragraph_image(
+            scaled_padded_words, max_line_width=max_line_width
+        )
     paragraph_image.save(args.output)
 
 

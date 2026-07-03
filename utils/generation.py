@@ -231,6 +231,82 @@ def build_paragraph_image(
     return paragraph_image
 
 
+def place_words_learned(
+    words,
+    fakes,
+    writer_id,
+    placer,
+    tokenizer,
+    text_encoder,
+    args,
+    max_line_width=900,
+    ref_height=64,
+    left_margin=16,
+    top_margin=16,
+):
+    """Run the autoregressive WordPlacer over the generated crops and paste them
+    onto a white canvas at learned absolute positions.
+
+    The crops (``fakes``, one PIL 'L' image per word) supply the ink width/height
+    inputs; the placer predicts, per word, ``p_newline`` / ``x_gap`` / ``y_off``
+    in line-height units (see utils/placer_seq.py). Predictions are integrated
+    left-to-right into absolute pixel positions, forcing a line wrap when the
+    cursor would exceed ``max_line_width`` even if the model did not predict one.
+    """
+    # imported lazily so the heavy torch text-encoder path is only pulled in when
+    # learned placement is actually requested
+    from utils.placer_seq import sequence_text_features
+
+    device = args.device
+    text_feats, _lengths = sequence_text_features(
+        [list(words)], tokenizer, text_encoder, device
+    )
+    ink = torch.zeros((1, len(words), 2), dtype=torch.float32, device=device)
+    for i, im in enumerate(fakes):
+        ink[0, i, 0] = im.width / ref_height
+        ink[0, i, 1] = im.height / ref_height
+    writer_ids = torch.tensor([writer_id], dtype=torch.long, device=device)
+
+    placer.eval()
+    with torch.no_grad():
+        nl_logit, x_gap, y_off = placer(text_feats, writer_ids, ink)
+    p_newline = torch.sigmoid(nl_logit)[0]
+    x_gap = x_gap[0]
+    y_off = y_off[0]
+
+    placed = []  # (x, y, PIL image)
+    cursor_x = left_margin
+    line_top = top_margin
+    prev_top = top_margin
+    for i, im in enumerate(fakes):
+        gap_px = max(0.0, x_gap[i].item()) * ref_height
+        off_px = y_off[i].item() * ref_height
+        newline = (i == 0) or (p_newline[i].item() > 0.5)
+        if not newline and cursor_x + gap_px + im.width > max_line_width:
+            newline = True
+
+        if newline:
+            if i > 0:
+                line_top = line_top + max(off_px, 0.5 * ref_height)
+            cursor_x = left_margin
+            word_top = line_top
+        else:
+            cursor_x += gap_px
+            word_top = prev_top + off_px
+
+        placed.append((int(round(cursor_x)), int(round(word_top)), im))
+        cursor_x += im.width
+        prev_top = word_top
+
+    canvas_w = max_line_width
+    canvas_h = max((y + im.height for (x, y, im) in placed), default=ref_height)
+    canvas_h += top_margin
+    canvas = Image.new("L", (canvas_w, canvas_h), color=255)
+    for x, y, im in placed:
+        canvas.paste(im, (x, y))
+    return canvas
+
+
 def stack_images(images, margin=0, background="white"):
     """Stack PIL images vertically with optional uniform margin between and around them."""
     res_width = max(img.width for img in images) + 2 * margin
