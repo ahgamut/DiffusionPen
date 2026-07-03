@@ -1,5 +1,6 @@
 import torch
 import os
+import math
 from PIL import Image
 import torchvision
 import cv2
@@ -43,6 +44,55 @@ def crop_whitespace_width(img):
     # rect = img.crop((x, 0, x + w, original_height))
     rect = img.crop((x, y, x + w, y + h))
     return np.array(rect)
+
+
+def split_long_word(word, max_chars=12):
+    """Split a long word into non-overlapping chunks of at most ``max_chars``
+    characters each, distributed as evenly as possible. Short words (and any
+    non-positive ``max_chars``) are returned unchanged as a single chunk.
+
+    Each chunk is generated on its own fixed 256-px canvas and later re-joined
+    (see ``join_word_chunks``), so per-character resolution stays high and the
+    hardcoded CANINE ``max_length`` truncation stops mattering.
+    """
+    if not max_chars or max_chars <= 0 or len(word) <= max_chars:
+        return [word]
+    nchunks = math.ceil(len(word) / max_chars)
+    base, rem = divmod(len(word), nchunks)
+    chunks = []
+    i = 0
+    for k in range(nchunks):
+        size = base + (1 if k < rem else 0)
+        chunks.append(word[i : i + size])
+        i += size
+    return chunks
+
+
+def join_word_chunks(chunk_imgs, gap_width=4):
+    """Horizontally butt-join the grayscale crops of a single word's chunks into
+    one wide crop. Chunks are vertically centered onto a common (max) height and
+    separated by a small white gap. Returns a PIL 'L' image."""
+    if len(chunk_imgs) == 1:
+        return chunk_imgs[0]
+    arrs = [np.array(im.convert("L")) for im in chunk_imgs]
+    max_h = max(a.shape[0] for a in arrs)
+    gap = np.ones((max_h, gap_width), dtype=np.uint8) * 255
+    pieces = []
+    for idx, a in enumerate(arrs):
+        pad_total = max_h - a.shape[0]
+        pad_top = pad_total // 2
+        pad_bottom = pad_total - pad_top
+        a = np.pad(
+            a,
+            ((pad_top, pad_bottom), (0, 0)),
+            mode="constant",
+            constant_values=255,
+        )
+        if idx > 0:
+            pieces.append(gap)
+        pieces.append(a)
+    joined = np.concatenate(pieces, axis=1)
+    return Image.fromarray(joined).convert("L")
 
 
 def add_rescale_padding(
@@ -295,10 +345,23 @@ def build_fake_image_N(
     crop_whitespace=True,
 ):
     labels = torch.tensor([s]).long().to(args.device)
+
+    # Expand long words into fixed-canvas chunks; each chunk is generated as its
+    # own "word" in the same batched pass (same writer style), then the chunks of
+    # a word are re-joined into a single wide crop so callers still see one crop
+    # per original word.
+    max_word_chars = getattr(args, "max_word_chars", 0)
+    pieces = []
+    owners = []
+    for wi, word in enumerate(words):
+        for chunk in split_long_word(word, max_word_chars):
+            pieces.append(chunk)
+            owners.append(wi)
+
     ema_sampled_images = diffusion.sampling_bulk(
         ema_model,
         vae,
-        x_text=words,
+        x_text=pieces,
         labels=labels,
         args=args,
         style_extractor=feature_extractor,
@@ -309,16 +372,20 @@ def build_fake_image_N(
         text_encoder=text_encoder,
         run_idx=None,
     )
-    fakes = []
     topil = torchvision.transforms.ToPILImage()
-    for i in range(len(words)):
-        word = words[i]
-        image = ema_sampled_images[i].squeeze(0)
+    word_chunks = [[] for _ in words]
+    for j in range(len(pieces)):
+        image = ema_sampled_images[j].squeeze(0)
         im = topil(image)
         im = im.convert("L")
         if crop_whitespace:
             im = crop_whitespace_width(im)
             im = Image.fromarray(im)
+        word_chunks[owners[j]].append(im)
+
+    fakes = []
+    for wi, word in enumerate(words):
+        im = join_word_chunks(word_chunks[wi])
         if len(word) == longest_word_length:
             max_word_length_width = im.width
         fakes.append(im)

@@ -33,6 +33,13 @@ def add_common_args(parser):
     parser.add_argument("--num-res-blocks", type=int, default=1)
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--mix-rate", type=float, default=None)
+    parser.add_argument(
+        "--max-word-chars",
+        type=int,
+        default=12,
+        help="split words longer than this into fixed-canvas chunks that are "
+        "generated separately and butt-joined (0 disables chunking)",
+    )
     # file paths
     parser.add_argument(
         "--save-path", type=str, default="./diffusionpen_iam_model_path"
