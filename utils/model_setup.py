@@ -9,7 +9,7 @@ from transformers import CanineModel, CanineTokenizer
 
 import os
 
-from models import UNetModel, ImageEncoder, Diffusion, WordPlacer
+from models import UNetModel, ImageEncoder, Diffusion, WordPlacer, WordUpsampler
 from utils.auxiliary_functions import get_default_character_classes
 
 
@@ -114,6 +114,21 @@ def load_models(args):
         placer.requires_grad_(False)
         print("loaded word placer from", placer_path)
 
+    # Optional learned super-resolution upsampler. Absent -> None, and callers
+    # fall back to Lanczos.
+    upsampler = None
+    upsampler_path = getattr(args, "upsampler_path", None)
+    if upsampler_path and os.path.isfile(upsampler_path):
+        upsampler = WordUpsampler()
+        upsampler = DataParallel(upsampler, device_ids=device_ids)
+        upsampler.load_state_dict(
+            torch.load(upsampler_path, map_location=args.device, weights_only=True)
+        )
+        upsampler = upsampler.to(args.device)
+        upsampler.eval()
+        upsampler.requires_grad_(False)
+        print("loaded word upsampler from", upsampler_path)
+
     return {
         "transform": transform,
         "tokenizer": tokenizer,
@@ -124,4 +139,5 @@ def load_models(args):
         "ddim": ddim,
         "feature_extractor": feature_extractor,
         "placer": placer,
+        "upsampler": upsampler,
     }

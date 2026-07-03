@@ -231,6 +231,32 @@ def build_paragraph_image(
     return paragraph_image
 
 
+def upsample_word(im, upsampler=None, args=None, scale=2):
+    """Return an upscaled (``scale``x) version of a single grayscale word crop.
+
+    Uses the learned ``WordUpsampler`` when provided, otherwise falls back to a
+    high-quality Lanczos resize. The output is uniformly ``scale``x larger in
+    both dimensions, so aspect ratio (and thus downstream geometry) is preserved.
+    """
+    if upsampler is None:
+        return im.resize((im.width * scale, im.height * scale), Image.LANCZOS)
+
+    device = args.device
+    x = torch.from_numpy(np.asarray(im.convert("L"), dtype=np.float32) / 255.0)
+    x = x.unsqueeze(0).unsqueeze(0).to(device)  # [1, 1, H, W]
+    upsampler.eval()
+    with torch.no_grad():
+        y = upsampler(x)
+    y = y.clamp(0.0, 1.0).squeeze(0).squeeze(0).cpu().numpy()
+    y = (y * 255.0).round().astype(np.uint8)
+    return Image.fromarray(y).convert("L")
+
+
+def upsample_words(fakes, upsampler=None, args=None, scale=2):
+    """Apply upsample_word to a list of word crops."""
+    return [upsample_word(im, upsampler, args, scale) for im in fakes]
+
+
 def place_words_learned(
     words,
     fakes,

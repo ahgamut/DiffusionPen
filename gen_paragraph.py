@@ -9,6 +9,7 @@ from utils.generation import (
     add_rescale_padding,
     build_paragraph_image,
     place_words_learned,
+    upsample_words,
 )
 from utils.arghandle import add_common_args, file_check
 from utils.model_setup import load_models
@@ -34,6 +35,18 @@ def main():
         default=None,
         help="checkpoint for the learned WordPlacer (required for --placement learned)",
     )
+    parser.add_argument(
+        "--upsample",
+        action="store_true",
+        help="upscale each word crop 2x before layout (learned WordUpsampler if "
+        "--upsampler-path is given, else Lanczos)",
+    )
+    parser.add_argument(
+        "--upsampler-path",
+        type=str,
+        default=None,
+        help="checkpoint for the learned WordUpsampler (optional; Lanczos fallback)",
+    )
     add_common_args(parser)
 
     args = parser.parse_args()
@@ -53,6 +66,7 @@ def main():
     tokenizer = m["tokenizer"]
     text_encoder = m["text_encoder"]
     placer = m["placer"]
+    upsampler = m["upsampler"]
 
     # make the code to generate lines
     lines = open(args.text_file).read()
@@ -79,6 +93,12 @@ def main():
         max_word_length_width=max_word_length_width,
     )
 
+    # optional super-resolution of each word crop before layout
+    up_scale = 1
+    if args.upsample:
+        up_scale = 2
+        fakes = upsample_words(fakes, upsampler=upsampler, args=args, scale=up_scale)
+
     if args.placement == "learned":
         if placer is None:
             raise RuntimeError(
@@ -92,7 +112,8 @@ def main():
             tokenizer=tokenizer,
             text_encoder=text_encoder,
             args=args,
-            max_line_width=max_line_width,
+            max_line_width=max_line_width * up_scale,
+            ref_height=64 * up_scale,
         )
     else:
         # Scale and pad each word
