@@ -59,7 +59,7 @@ def add_rescale_padding(
         scaled_width = max(5, int(avg_char_width * len(word)))
         scaled_height = max(5, int(scaled_width / as_ratio))
 
-        scaled_img = img_pil.resize((scaled_width, scaled_height))
+        scaled_img = img_pil.resize((scaled_width, scaled_height), Image.LANCZOS)
         # print(f"Word {word} - scaled_img {scaled_img.size}")
         if word in PUNCTUATION:
             # rescale to height 10
@@ -67,9 +67,13 @@ def add_rescale_padding(
             h_punc = scaled_img.height
             as_ratio_punct = w_punc / h_punc
             if word == ".":
-                scaled_img = scaled_img.resize((max(int(5 * as_ratio_punct), 5), 5))
+                scaled_img = scaled_img.resize(
+                    (max(int(5 * as_ratio_punct), 5), 5), Image.LANCZOS
+                )
             else:
-                scaled_img = scaled_img.resize((max(int(13 * as_ratio_punct), 13), 13))
+                scaled_img = scaled_img.resize(
+                    (max(int(13 * as_ratio_punct), 13), 13), Image.LANCZOS
+                )
             # pad on top and leave the image in the bottom
             padding_bottom = 10
             padding_top = (
@@ -105,7 +109,7 @@ def add_rescale_padding(
                 rsz_width = max(3, rsz_width)
                 rsz_height = max(3, rsz_height)
 
-                scaled_img = scaled_img.resize((rsz_width, rsz_height))
+                scaled_img = scaled_img.resize((rsz_width, rsz_height), Image.LANCZOS)
                 padding = (max_height - scaled_img.height) // 2
                 padded_img = np.pad(
                     scaled_img,

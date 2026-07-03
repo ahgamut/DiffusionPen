@@ -33,7 +33,7 @@ def image_resize(img, height=None, width=None):
     return img
 
 
-def image_resize_PIL(img, height=None, width=None):
+def image_resize_PIL(img, height=None, width=None, resample=Image.LANCZOS):
     if height is None and width is None:
         return img  # No resizing needed
 
@@ -52,7 +52,7 @@ def image_resize_PIL(img, height=None, width=None):
         new_height = height
 
     # Resize the image
-    resized_img = img.resize((new_width, new_height))
+    resized_img = img.resize((new_width, new_height), resample)
     # resized_img.save('res.png')
     return resized_img
 

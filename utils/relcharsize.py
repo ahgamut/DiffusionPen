@@ -75,7 +75,7 @@ def get_resize_placed_word(
     # print(word, pixwidth, pixheight)
     pixwidth = max(pixwidth, 3)
     pixheight = max(pixheight, 3)
-    img_rsz = img.resize((pixwidth, pixheight))
+    img_rsz = img.resize((pixwidth, pixheight), Image.LANCZOS)
 
     wcs = set([ch for ch in word])
     if len(wcs - PUNCT_ST) == 0:

@@ -60,7 +60,7 @@ def build_ref_paragraph(fakes, xpr, max_line_width, longest_word_length):
         scaled_height = word.height
         scaled_width = max(scaled_width, 3)
         scaled_height = max(scaled_height, 3)
-        scaled_img = fakes[i].resize((scaled_width, scaled_height))
+        scaled_img = fakes[i].resize((scaled_width, scaled_height), Image.LANCZOS)
         dupe.paste(scaled_img, (word.x_start, word.y_start))
 
     dupe = dupe.convert("L")
