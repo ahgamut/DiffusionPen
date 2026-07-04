@@ -372,11 +372,17 @@ def main():
     else:
         raise ValueError("unknown dataset!")
 
+    # Worker-dependent flags only make sense with >0 workers.
+    loader_kwargs = dict(pin_memory=True)
+    if args.num_workers > 0:
+        loader_kwargs.update(persistent_workers=True, prefetch_factor=4)
+
     train_loader = DataLoader(
         train_data,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
+        **loader_kwargs,
     )
 
     test_loader = DataLoader(
@@ -384,6 +390,7 @@ def main():
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
+        **loader_kwargs,
     )
     character_classes = get_default_character_classes()
 
