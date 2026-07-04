@@ -224,6 +224,7 @@ class WLStyleDataset(Dataset):
         self.writer_ids = writer_ids
         self.wclasses = len(writer_ids)
         print("Number of writers", self.wclasses)
+        self._build_writer_index()
         if self.character_classes is None:
             res = set()
             # compute character classes given input transcriptions
@@ -243,6 +244,21 @@ class WLStyleDataset(Dataset):
             self.max_transcr_len = self.max_transcr_len
         # END FINALIZE
 
+    def _build_writer_index(self):
+        # Precompute writer_id -> sample indices once so __getitem__ avoids the
+        # O(N) rescan-per-call that made same-writer sampling O(N^2) per epoch.
+        # "_long" keeps only transcriptions with len > 3, matching the old filter;
+        # long_indices is the flat pool used for rejection-sampling negatives.
+        self.writer_to_indices = {}
+        self.writer_to_indices_long = {}
+        self.long_indices = []
+        for i, p in enumerate(self.data):
+            wid = p[2]
+            self.writer_to_indices.setdefault(wid, []).append(i)
+            if len(p[1]) > 3:
+                self.writer_to_indices_long.setdefault(wid, []).append(i)
+                self.long_indices.append(i)
+
     def __len__(self):
         return len(self.data)
 
@@ -251,28 +267,27 @@ class WLStyleDataset(Dataset):
         transcr = self.data[index][1]
         wid = self.data[index][2]
         img_path = self.data[index][3]
-        # pick another sample that has the same self.data[2] or same writer id
-        positive_samples = [p for p in self.data if p[2] == wid and len(p[1]) > 3]
-        negative_samples = [n for n in self.data if n[2] != wid and len(n[1]) > 3]
-        positive = random.choice(positive_samples)[0]
+        # pick other samples from the same writer id (see _build_writer_index)
+        positive_long = self.writer_to_indices_long.get(wid, [])
+        positive = self.data[random.choice(positive_long)][0]
 
         # Make sure you have at least 5 matching images
-        if len(positive_samples) >= 5:
+        if len(positive_long) >= 5:
             # Randomly select 5 indices from the matching_indices
-            random_samples = random.sample(positive_samples, k=5)
-            # Retrieve the corresponding images
-            style_images = [i[0] for i in random_samples]
+            random_samples = random.sample(positive_long, k=5)
         else:
             # Handle the case where there are fewer than 5 matching images (if needed)
             # print("Not enough matching images with writer ID", wid)
-            positive_samples_ = [p for p in self.data if p[2] == wid]
-            # print('len positive samples', len(positive_samples_), 'wid', wid)
-            random_samples_ = random.sample(positive_samples_, k=5)
-            # Retrieve the corresponding images
-            style_images = [i[0] for i in random_samples_]
+            random_samples = random.sample(self.writer_to_indices[wid], k=5)
+        # Retrieve the corresponding images
+        style_images = [self.data[i][0] for i in random_samples]
 
-        # pick another image from a different writer
-        negative = random.choice(negative_samples)[0]
+        # pick another image from a different writer (uniform over other-writer
+        # long samples, via rejection sampling on the flat long pool)
+        neg_index = random.choice(self.long_indices)
+        while self.data[neg_index][2] == wid:
+            neg_index = random.choice(self.long_indices)
+        negative = self.data[neg_index][0]
 
         img_pos = positive  # image_resize_PIL(positive, height=positive.height // 2)
         img_neg = negative  # image_resize_PIL(negative, height=negative.height // 2)

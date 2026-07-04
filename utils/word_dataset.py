@@ -194,6 +194,7 @@ class WordLineDataset(Dataset):
         self.writer_ids = writer_ids
         self.wclasses = len(writer_ids)
         print("Number of writers", self.wclasses)
+        self._build_writer_index()
         if self.character_classes is None:
             res = set()
             # compute character classes given input transcriptions
@@ -212,6 +213,19 @@ class WordLineDataset(Dataset):
             self.max_transcr_len = self.max_transcr_len
         # END FINALIZE
 
+    def _build_writer_index(self):
+        # Precompute writer_id -> sample indices once so __getitem__ can draw
+        # same-writer positives/style crops in O(1) instead of rescanning the
+        # whole dataset every call (previously O(N) per sample => O(N^2)/epoch).
+        # "_long" keeps only transcriptions with len > 3, matching the old filter.
+        self.writer_to_indices = {}
+        self.writer_to_indices_long = {}
+        for i, p in enumerate(self.data):
+            wid = p[2]
+            self.writer_to_indices.setdefault(wid, []).append(i)
+            if len(p[1]) > 3:
+                self.writer_to_indices_long.setdefault(wid, []).append(i)
+
     def __len__(self):
         return len(self.data)
 
@@ -224,25 +238,21 @@ class WordLineDataset(Dataset):
         transcr = self.data[index][1]
         wid = self.data[index][2]
 
-        # pick another sample that has the same self.data[2] or same writer id
-        positive_samples = [p for p in self.data if p[2] == wid and len(p[1]) > 3]
-        # negative_samples = [p for p in self.data if p[2] != wid and len(p[1])>3]
+        # pick other samples from the same writer id (see _build_writer_index)
+        positive_long = self.writer_to_indices_long.get(wid, [])
         # Make sure you have at least 5 matching images
-        if len(positive_samples) >= 5:
+        if len(positive_long) >= 5:
             # Randomly select 5 indices from the matching_indices
-            random_samples = random.sample(positive_samples, k=5)
-            # Retrieve the corresponding images
-            style_images = [i[0] for i in random_samples]
+            random_samples = random.sample(positive_long, k=5)
         else:
             # Handle the case where there are fewer than 5 matching images (if needed)
             # print("Not enough matching images with writer ID", wid)
-            positive_samples_ = [p for p in self.data if p[2] == wid]
-            random_samples_ = random.sample(positive_samples_, k=5)
-            # Retrieve the corresponding images
-            style_images = [i[0] for i in random_samples_]
+            random_samples = random.sample(self.writer_to_indices[wid], k=5)
+        # Retrieve the corresponding images
+        style_images = [self.data[i][0] for i in random_samples]
 
-        cor_images = random.sample(positive_samples, k=1)
-        cor_im = cor_images[0][0]
+        cor_index = random.sample(positive_long, k=1)[0]
+        cor_im = self.data[cor_index][0]
         cor_im = self.transforms(cor_im)
 
         """
