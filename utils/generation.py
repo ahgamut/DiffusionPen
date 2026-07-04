@@ -257,6 +257,14 @@ def upsample_words(fakes, upsampler=None, args=None, scale=2):
     return [upsample_word(im, upsampler, args, scale) for im in fakes]
 
 
+def _median(values, fallback):
+    vals = sorted(values)
+    n = len(vals)
+    if n == 0:
+        return float(fallback)
+    return float(vals[n // 2] if n % 2 else 0.5 * (vals[n // 2 - 1] + vals[n // 2]))
+
+
 def place_words_learned(
     words,
     fakes,
@@ -269,60 +277,95 @@ def place_words_learned(
     ref_height=64,
     left_margin=16,
     top_margin=16,
+    seed=None,
+    gap_clamp=(0.0, 5.0),
+    base_clamp=(-1.0, 1.0),
+    advance_jitter=0.05,
 ):
-    """Run the autoregressive WordPlacer over the generated crops and paste them
-    onto a white canvas at learned absolute positions.
+    """Lay the generated crops out with the stage-2 WordPlacer.
 
-    The crops (``fakes``, one PIL 'L' image per word) supply the ink width/height
-    inputs; the placer predicts, per word, ``p_newline`` / ``x_gap`` / ``y_off``
-    in line-height units (see utils/placer_seq.py). Predictions are integrated
-    left-to-right into absolute pixel positions, forcing a line wrap when the
-    cursor would exceed ``max_line_width`` even if the model did not predict one.
+    The model predicts, per adjacent pair, a Gaussian over the horizontal gap
+    and vertical baseline drift in units of ``H`` (see utils/placer_seq.py). Here
+    ``H`` is recovered the same way as in training -- the **median ink-height of
+    the generated crops** -- so the normalization matches. Predictions are
+    sampled (clamped so words never overlap), then integrated left-to-right by a
+    **deterministic greedy fill**: a word starts a new line whenever it would
+    overflow ``max_line_width``; new lines drop by the writer's ``line_advance``
+    (also in ``H`` units, carried on the model) plus small jitter. Pass ``seed``
+    for reproducible sampling; different seeds give slight variation.
     """
     # imported lazily so the heavy torch text-encoder path is only pulled in when
     # learned placement is actually requested
     from utils.placer_seq import sequence_text_features
 
+    n = len(fakes)
+    if n == 0:
+        return Image.new("L", (max_line_width, ref_height), color=255)
+
+    # Shared reference scale, computed identically to training (median word height).
+    H = _median([im.height for im in fakes], ref_height)
+
     device = args.device
     text_feats, _lengths = sequence_text_features(
         [list(words)], tokenizer, text_encoder, device
     )
-    ink = torch.zeros((1, len(words), 2), dtype=torch.float32, device=device)
+    ink = torch.zeros((1, n, 2), dtype=torch.float32, device=device)
+    after_punct = torch.zeros((1, n), dtype=torch.float32, device=device)
     for i, im in enumerate(fakes):
-        ink[0, i, 0] = im.width / ref_height
-        ink[0, i, 1] = im.height / ref_height
+        ink[0, i, 0] = im.width / H
+        ink[0, i, 1] = im.height / H
+        if i > 0 and str(words[i - 1]) and str(words[i - 1])[-1] in PUNCTUATION:
+            after_punct[0, i] = 1.0
     writer_ids = torch.tensor([writer_id], dtype=torch.long, device=device)
 
     placer.eval()
     with torch.no_grad():
-        nl_logit, x_gap, y_off = placer(text_feats, writer_ids, ink)
-    p_newline = torch.sigmoid(nl_logit)[0]
-    x_gap = x_gap[0]
-    y_off = y_off[0]
+        mu_gap, logvar_gap, mu_base, logvar_base = placer(
+            text_feats, writer_ids, ink, after_punct=after_punct
+        )
+
+    # Sample gap/base ~ N(mu, exp(logvar)) on CPU with a seedable generator.
+    gen = torch.Generator()
+    if seed is not None:
+        gen.manual_seed(int(seed))
+
+    def sample(mu, logvar, lo, hi):
+        mu = mu[0].detach().cpu()
+        std = torch.exp(0.5 * logvar[0].detach().cpu())
+        eps = torch.randn(mu.shape, generator=gen)
+        return torch.clamp(mu + std * eps, lo, hi)
+
+    gap = sample(mu_gap, logvar_gap, *gap_clamp)
+    base = sample(mu_base, logvar_base, *base_clamp)
+
+    core = getattr(placer, "module", placer)
+    advance = core.line_advance
+    n_writers = advance.shape[0]
+    wa = float(advance[writer_id]) if 0 <= writer_id < n_writers else 4.0
+    adv_eps = torch.randn(n, generator=gen)  # per-line jitter draws (indexed by word)
 
     placed = []  # (x, y, PIL image)
     cursor_x = left_margin
-    line_top = top_margin
-    prev_top = top_margin
+    line_center = top_margin + 0.5 * H
+    prev_center = line_center
     for i, im in enumerate(fakes):
-        gap_px = max(0.0, x_gap[i].item()) * ref_height
-        off_px = y_off[i].item() * ref_height
-        newline = (i == 0) or (p_newline[i].item() > 0.5)
-        if not newline and cursor_x + gap_px + im.width > max_line_width:
-            newline = True
+        gap_px = float(gap[i]) * H
+        newline = (i == 0) or (cursor_x + gap_px + im.width > max_line_width)
 
         if newline:
             if i > 0:
-                line_top = line_top + max(off_px, 0.5 * ref_height)
+                jitter = 1.0 + advance_jitter * float(adv_eps[i])
+                line_center = line_center + max(wa * jitter, 1.2) * H
             cursor_x = left_margin
-            word_top = line_top
+            cur_center = line_center
         else:
             cursor_x += gap_px
-            word_top = prev_top + off_px
+            cur_center = prev_center + float(base[i]) * H
 
-        placed.append((int(round(cursor_x)), int(round(word_top)), im))
+        word_top = int(round(cur_center - 0.5 * im.height))
+        placed.append((int(round(cursor_x)), max(0, word_top), im))
         cursor_x += im.width
-        prev_top = word_top
+        prev_center = cur_center
 
     canvas_w = max_line_width
     canvas_h = max((y + im.height for (x, y, im) in placed), default=ref_height)
