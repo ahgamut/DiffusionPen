@@ -230,3 +230,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# SLURM job logs from scripts/slurm/*.sbatch
+slurm-logs/
