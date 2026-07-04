@@ -107,6 +107,37 @@ class Word:
         l3, wid = depack_string(blob, offset)
         return Word(*things, raw, idd, wid)
 
+    def to_dict(self):
+        """Native-field dict for msgpack storage (stage-4 format); the struct
+        packing is only kept for the legacy .pt path."""
+        return {
+            "x_start": self.x_start,
+            "x_end": self.x_end,
+            "y_start": self.y_start,
+            "y_end": self.y_end,
+            "pl_width": self.pl_width,
+            "pl_height": self.pl_height,
+            "pl_ystart": self.pl_ystart,
+            "raw": self.raw,
+            "idd": self.idd,
+            "wid": self.wid,
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(
+            d["x_start"],
+            d["x_end"],
+            d["y_start"],
+            d["y_end"],
+            d["pl_width"],
+            d["pl_height"],
+            d["pl_ystart"],
+            d["raw"],
+            d["idd"],
+            d["wid"],
+        )
+
     @classmethod
     def get_startend(cls, elem, wid):
         parts = [x for x in elem]
