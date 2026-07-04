@@ -125,6 +125,11 @@ class Diffusion:
 
         self.img_size = img_size
         self.device = args.device
+        # Optional precomputed per-writer style bank [num_writers, 1280]
+        # (utils/build_style_bank.py). When set, get_style_coll looks up the
+        # writer's mean vector instead of reading 5 random crops + running the
+        # CNN -- faster, reproducible, lower-variance. See stage-3 Part A.
+        self.style_bank = None
 
     def prepare_noise_schedule(self):
         return torch.linspace(self.beta_start, self.beta_end, self.noise_steps)
@@ -181,6 +186,16 @@ class Diffusion:
         interpol=False,
     ):
         style_coll = dict()
+        if self.style_bank is not None:
+            # Bank lookup: tile the writer's mean vector to [5, 1280] so the
+            # UNet's reshape(b,5,1280)->mean returns exactly that mean (no crop
+            # read, no CNN, no random.sample jitter). Matches the CNN path shape.
+            vec = self.style_bank[label_index].to(args.device)
+            s_feat = vec.unsqueeze(0).expand(5, -1).contiguous()
+            style_coll["images"] = None
+            style_coll["features"] = s_feat
+            return style_coll
+
         s_imgs = self.get_style(
             label_index,
             transform,

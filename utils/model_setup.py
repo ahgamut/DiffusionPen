@@ -51,6 +51,16 @@ def load_models(args):
 
     diffusion = Diffusion(img_size=args.img_size, args=args)
 
+    # Optional precomputed per-writer style bank (stage-3 Part A). When enabled
+    # and present, the sampling path looks up a writer's mean style vector
+    # instead of reading 5 random crops + running the CNN per word.
+    if getattr(args, "style_bank", False):
+        bank_path = getattr(args, "style_bank_path", None)
+        if bank_path and os.path.isfile(bank_path):
+            bank = torch.load(bank_path, map_location=args.device, weights_only=True)
+            diffusion.style_bank = bank.to(args.device)
+            print("loaded style bank from", bank_path, tuple(bank.shape))
+
     if args.latent:
         vae = AutoencoderKL.from_pretrained(args.stable_dif_path, subfolder="vae")
         vae = DataParallel(vae, device_ids=device_ids)

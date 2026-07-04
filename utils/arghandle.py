@@ -65,6 +65,13 @@ def add_common_args(parser):
     parser.add_argument("--no-dataparallel", dest="dataparallel", action="store_false")
     parser.add_argument("--load-check", dest="load_check", action="store_true")
     parser.add_argument("--no-load-check", dest="load_check", action="store_false")
+    # Precomputed per-writer style bank (stage-3 Part A). Used when enabled AND
+    # the file exists; otherwise generation falls back to the 5-crop CNN path.
+    parser.add_argument("--style-bank", dest="style_bank", action="store_true")
+    parser.add_argument("--no-style-bank", dest="style_bank", action="store_false")
+    parser.add_argument(
+        "--style-bank-path", type=str, default="./saved_iam_data/style_bank.pt"
+    )
 
     parser.set_defaults(
         color=True,
@@ -73,4 +80,5 @@ def add_common_args(parser):
         interpolation=False,
         dataparallel=False,
         load_check=False,
+        style_bank=True,
     )
