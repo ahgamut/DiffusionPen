@@ -214,7 +214,10 @@ def train(
                 max_length=40,
             ).to(args.device)
 
-            if style_extractor is not None:
+            if style_images.dim() == 3:
+                # Cached per-image style features (bs, 5, feat) -> (bs*5, feat).
+                style_features = style_images.reshape(-1, style_images.size(-1))
+            elif style_extractor is not None:
                 reshaped_images = style_images.reshape(-1, 3, 64, 256)
                 style_features = style_extractor(reshaped_images)
 
@@ -329,6 +332,49 @@ def load_style_weights(model, device, style_path):
     print("Pretrained style model loaded")
 
 
+def build_style_cache(dataset, extractor, args):
+    """Precompute and cache the frozen style-CNN features for every image.
+
+    The style extractor is frozen + eval, so its output for a given image is
+    deterministic. We compute it once for all dataset images, cache [N, feat]
+    to disk (keyed on the style checkpoint + dataset identity so a changed
+    checkpoint rebuilds), and attach it to the dataset. __getitem__ then gathers
+    the 5 sampled style vectors by index instead of running the CNN on 5 crops
+    every step -- which also slashes the per-batch host->device transfer.
+    """
+    os.makedirs(args.style_cache_path, exist_ok=True)
+    key = "{}_{}_{}".format(
+        os.path.splitext(os.path.basename(args.style_path.rstrip("/")))[0],
+        getattr(dataset, "setname", "data"),
+        len(dataset.data),
+    )
+    cache_file = os.path.join(args.style_cache_path, key + ".pt")
+
+    if os.path.isfile(cache_file):
+        feats = torch.load(cache_file, map_location="cpu", weights_only=True)
+        print("Loaded style feature cache:", cache_file, tuple(feats.shape))
+    else:
+        print("Building style feature cache ->", cache_file)
+        extractor.eval()
+        n = len(dataset.data)
+        bs = args.batch_size
+        chunks = []
+        with torch.no_grad():
+            for start in tqdm(range(0, n, bs), desc="style-cache"):
+                imgs = [
+                    dataset.transforms(dataset.data[i][0])
+                    for i in range(start, min(start + bs, n))
+                ]
+                batch = torch.stack(imgs).to(args.device)
+                chunks.append(extractor(batch).detach().cpu())
+        feats = torch.cat(chunks, dim=0)
+        torch.save(feats, cache_file)
+        print("Saved style feature cache:", cache_file, tuple(feats.shape))
+
+    dataset.style_cache = feats
+    return feats
+
+
 def main():
     """Main function"""
     parser = argparse.ArgumentParser("diffusionpen-train")
@@ -338,6 +384,10 @@ def main():
     parser.add_argument("--level", type=str, default="word", help="word, line")
     parser.add_argument("--style-name", default="mobilenetv2_100", type=str)
     parser.add_argument("--gnhk-path", type=str, default="", help="path to GNHK dataset root")
+    parser.add_argument("--style-cache", dest="style_cache", action="store_true")
+    parser.add_argument("--no-style-cache", dest="style_cache", action="store_false")
+    parser.add_argument("--style-cache-path", type=str, default="./saved_style_cache")
+    parser.set_defaults(style_cache=True)
     add_common_args(parser)
     args = parser.parse_args()
 
@@ -485,6 +535,10 @@ def main():
     feature_extractor = feature_extractor.to(args.device)
     feature_extractor.requires_grad_(False)
     feature_extractor.eval()
+
+    # Precompute frozen style features so the per-step 5-crop CNN pass is skipped.
+    if args.style_cache:
+        build_style_cache(train_data, feature_extractor, args)
 
     train(
         diffusion,

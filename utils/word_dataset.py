@@ -162,6 +162,10 @@ class WordLineDataset(Dataset):
         self.text_encoder = text_encoder
         self.output_max_len = OUTPUT_MAX_LEN
         self.feat_extractor = feat_extractor
+        # Optional [N, feat] tensor of precomputed frozen style-CNN features,
+        # attached externally (see train.py::build_style_cache). When set,
+        # __getitem__ returns cached style vectors instead of raw style crops.
+        self.style_cache = None
 
     def __finalize__(self):
         """
@@ -248,8 +252,6 @@ class WordLineDataset(Dataset):
             # Handle the case where there are fewer than 5 matching images (if needed)
             # print("Not enough matching images with writer ID", wid)
             random_samples = random.sample(self.writer_to_indices[wid], k=5)
-        # Retrieve the corresponding images
-        style_images = [self.data[i][0] for i in random_samples]
 
         cor_index = random.sample(positive_long, k=1)[0]
         cor_im = self.data[cor_index][0]
@@ -263,15 +265,13 @@ class WordLineDataset(Dataset):
         pos_image = self.transforms(pos_image)
         neg_image = self.transforms(neg_image)
         """
-        st_imgs = []
-        for s_img in style_images:
-
-            if self.transforms is not None:
-                s_img_tensor = self.transforms(s_img)
-
-            st_imgs += [s_img_tensor]
-
-        s_imgs = torch.stack(st_imgs)
+        if self.style_cache is not None:
+            # Gather precomputed frozen style-CNN features by index -> (5, feat).
+            # The in-loop style CNN pass in train.py is skipped entirely.
+            s_imgs = self.style_cache[random_samples]
+        else:
+            st_imgs = [self.transforms(self.data[i][0]) for i in random_samples]
+            s_imgs = torch.stack(st_imgs)
 
         return (
             img,
