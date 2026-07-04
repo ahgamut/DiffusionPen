@@ -11,12 +11,19 @@ from models import WordPlacer, AvgMeter
 from utils.placer_seq import IAMSequenceDataset, sequence_text_features
 from utils.generation import setup_logging
 from utils.arghandle import add_common_args
-from utils.training_utils import custom_loss, get_loaders
+from utils.training_utils import get_loaders
 
 
 def frz(model):
     model.eval()
     model.requires_grad_(False)
+
+
+def gaussian_nll(target, mu, logvar):
+    """Per-element negative log-likelihood of ``target`` under N(mu, exp(logvar)),
+    dropping the constant 0.5*log(2*pi). Lower logvar => sharper, but the
+    ``(target-mu)^2 * exp(-logvar)`` term penalizes overconfidence."""
+    return 0.5 * (logvar + (target - mu) ** 2 * torch.exp(-logvar))
 
 
 def run_batch(batch, placer, tokenizer, text_encoder, args):
@@ -26,25 +33,34 @@ def run_batch(batch, placer, tokenizer, text_encoder, args):
     )
     writer_ids = batch["writer_ids"].to(device)
     ink = batch["ink"].to(device)
-    nl_logit, x_gap, y_off = placer(text_feats, writer_ids, ink, lengths=lengths)
-
-    mask = batch["mask"].to(device)
-    tgt_nl = batch["newline"].to(device)
-    tgt_xg = batch["x_gap"].to(device)
-    tgt_yo = batch["y_off"].to(device)
-
-    bce = nn.functional.binary_cross_entropy_with_logits(
-        nl_logit, tgt_nl, reduction="none"
+    after_punct = batch["after_punct"].to(device)
+    mu_gap, logvar_gap, mu_base, logvar_base = placer(
+        text_feats, writer_ids, ink, after_punct=after_punct, lengths=lengths
     )
-    loss_nl = (bce * mask).sum() / mask.sum().clamp(min=1.0)
 
-    # zero out padded positions so they contribute nothing to the regression loss
-    reg_loss_fn = custom_loss(0.01, alpha=1.0, beta=5.0)
-    pred_reg = torch.stack([x_gap * mask, y_off * mask], dim=-1)
-    tgt_reg = torch.stack([tgt_xg * mask, tgt_yo * mask], dim=-1)
-    loss_reg = reg_loss_fn(pred_reg, tgt_reg) / mask.sum().clamp(min=1.0)
+    mask = batch["trans_mask"].to(device)
+    tgt_gap = batch["gap"].to(device)
+    tgt_base = batch["base"].to(device)
 
-    return loss_nl + loss_reg
+    # Gaussian NLL on gap + baseline residuals, over valid in-line transitions.
+    nll = gaussian_nll(tgt_gap, mu_gap, logvar_gap) + gaussian_nll(
+        tgt_base, mu_base, logvar_base
+    )
+    loss = (nll * mask).sum() / mask.sum().clamp(min=1.0)
+    return loss
+
+
+def populate_stat_buffers(placer, stats):
+    """Copy dataset statistics into the model's (non-optimized) buffers so they
+    ship in the checkpoint: residual centers + per-writer new-line advance."""
+    core = placer.module if isinstance(placer, DataParallel) else placer
+    with torch.no_grad():
+        core.default_gap.fill_(stats["default_gap"])
+        core.default_base.fill_(stats["default_base"])
+        core.line_advance.fill_(stats["line_advance_global"])
+        for widx, val in stats["line_advance"].items():
+            core.line_advance[int(widx)] = val
+    print("populated placer stat buffers from dataset")
 
 
 def train_epoch(placer, tokenizer, text_encoder, optimizer, loader, meter, args):
@@ -99,6 +115,9 @@ def main():
     placer = WordPlacer(num_writers=339)
     placer = DataParallel(placer, device_ids=device_ids)
     placer = placer.to(args.device)
+    # Seed the stat buffers from the dataset before any (optional) checkpoint
+    # load, so a fresh run saves them and a resumed run keeps the ckpt's values.
+    populate_stat_buffers(placer, dset.stats)
 
     optimizer = optim.AdamW(placer.parameters(), lr=args.lr)
 
