@@ -207,11 +207,11 @@ class IAMSequenceDataset(Dataset):
         print(f"dataset has {len(self.sequences)} paragraph sequences")
 
     def save_sequences(self, seq_file):
-        base_file = os.path.join(self.savefolder, "placer_IAM.pt")
-        raw = torch.load(base_file, weights_only=False)
-        words = [Word.from_bytes(x) for x in raw["words"]]
+        from utils.placer_iam import load_placer_store
+
+        store = load_placer_store(self.savefolder)
         writer_index = load_writer_index()
-        self.sequences, self.stats = build_sequences(words, writer_index)
+        self.sequences, self.stats = build_sequences(store.words, writer_index)
         torch.save({"sequences": self.sequences, "stats": self.stats}, seq_file)
         print("saved", seq_file)
 

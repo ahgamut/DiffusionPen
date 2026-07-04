@@ -359,10 +359,12 @@ def build_style_cache(dataset, extractor, args):
         n = len(dataset.data)
         bs = args.batch_size
         chunks = []
+        # _img() fetches the crop from either the memmap array or data[i][0].
+        get_img = getattr(dataset, "_img", lambda i: dataset.data[i][0])
         with torch.no_grad():
             for start in tqdm(range(0, n, bs), desc="style-cache"):
                 imgs = [
-                    dataset.transforms(dataset.data[i][0])
+                    dataset.transforms(get_img(i))
                     for i in range(start, min(start + bs, n))
                 ]
                 batch = torch.stack(imgs).to(args.device)

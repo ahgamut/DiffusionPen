@@ -61,19 +61,28 @@ class CVLBaseDataset(Dataset):
             self.stopwords = self.stopwords[0]
 
         save_path = "./saved_iam_data"
-        save_file = "{}/{}_{}_{}.pt".format(
-            save_path, self.subset, self.segmentation_level, self.setname
-        )
-        if isfile(save_file):
-            raw = torch.load(save_file, weights_only=False)  # unsafe, but just ndarrays
-            print("loaded save file", save_file)
-        else:
-            raw = self.main_loader(self.subset, self.segmentation_level)
-            torch.save(raw, save_file)
 
-        self.img_paths = raw["paths"]
-        self.data = raw["data"]
-        self.wmap = raw["wmap"]
+        # Prefer the stage-4 memmap split dir if present; else the legacy .pt.
+        mm_dir = "{}/cvl_word_{}".format(save_path, self.subset)
+        from utils.memmap_dataset import split_exists  # lazy: no msgpack for .pt
+
+        if split_exists(mm_dir):
+            self._load_memmap(mm_dir)
+        else:
+            self.images = None
+            save_file = "{}/{}_{}_{}.pt".format(
+                save_path, self.subset, self.segmentation_level, self.setname
+            )
+            if isfile(save_file):
+                raw = torch.load(save_file, weights_only=False)  # unsafe; just ndarrays
+                print("loaded save file", save_file)
+            else:
+                raw = self.main_loader(self.subset, self.segmentation_level)
+                torch.save(raw, save_file)
+
+            self.img_paths = raw["paths"]
+            self.data = raw["data"]
+            self.wmap = raw["wmap"]
         self.windex_forward = json.load(open(self.windexmap_file))  # writer id to 0-309
         self.windex_backward = {
             v: k for k, v in self.windex_forward.items()
@@ -93,6 +102,25 @@ class CVLBaseDataset(Dataset):
         self.character_classes = res
         self.max_transcr_len = self.max_transcr_len
 
+    def _load_memmap(self, mm_dir):
+        """Load a stage-4 CVL memmap split; images live in self.images, and
+        self.data holds (None, transcr, wid) so existing consumers are unchanged."""
+        from utils import memmap_dataset as mm
+
+        self.images = mm.load_images(mm_dir)
+        meta = mm.load_meta(mm_dir)
+        index = mm.load_index(mm_dir)
+        self.data = [(None, m["transcr"], m["wid"]) for m in meta]
+        self.img_paths = [m.get("id", "") for m in meta]
+        self.wmap = index["by_writer"]
+        print("loaded memmap split", mm_dir, "N=", len(meta))
+
+    def _img(self, index):
+        """Word crop at ``index`` as a PIL image (memmap array or stored bytes)."""
+        if self.images is not None:
+            return Image.fromarray(np.asarray(self.images[index]))
+        return self.read_image(self.data[index][0])
+
     def samples_from_index(self, ind, num_samples, is_widi=False, strict=True):
         if is_widi:
             # widi is in 0-309
@@ -101,18 +129,19 @@ class CVLBaseDataset(Dataset):
             wid = ind
 
         positives = self.wmap[wid]
-        imgs = []
-        paths = []
-        while len(paths) < num_samples:
+        idxs = []
+        while len(idxs) < num_samples:
             mas = random.sample(positives, num_samples)
             for ma_ind in mas:
                 ma = self.data[ma_ind]
                 if len(ma[2]) > 3 or not strict:
-                    imgs.append(ma[0])
-                    paths.append(self.img_paths[ma_ind])
+                    idxs.append(ma_ind)
 
-        result = {"imgs": imgs[:num_samples], "paths": paths[:num_samples]}
-        result["imgs"] = [self.read_image(x) for x in result["imgs"]]
+        idxs = idxs[:num_samples]
+        result = {
+            "imgs": [self._img(i) for i in idxs],
+            "paths": [self.img_paths[i] for i in idxs],
+        }
         return result
 
     @staticmethod
@@ -235,7 +264,7 @@ class CVLDataset(CVLBaseDataset):
         return len(self.data)
 
     def __getitem__(self, index):
-        img = self.read_image(self.data[index][0])
+        img = self._img(index)
         transcr = self.data[index][1]
         wid = self.data[index][2]
         img_path = self.img_paths[index]
@@ -272,7 +301,7 @@ class CVLStyleDataset(CVLBaseDataset):
         return len(self.data)
 
     def __getitem__(self, index):
-        img = self.read_image(self.data[index][0])
+        img = self._img(index)
         transcr = self.data[index][1]
         wid = self.data[index][2]
 

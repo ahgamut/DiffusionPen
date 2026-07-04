@@ -21,9 +21,10 @@ class IAMCropDataset(Dataset):
 
     def __init__(self, savefolder="./saved_iam_data", size=(64, 256)):
         self.size = size
-        base_file = os.path.join(savefolder, "placer_IAM.pt")
-        raw = torch.load(base_file, weights_only=False)
-        self.wimgs = raw["wimgs"]
+        from utils.placer_iam import load_placer_store
+
+        # wimgs[i] -> RGB bytes for Image.frombytes, from memmap dir or .pt.
+        self.wimgs = load_placer_store(savefolder).wimgs
 
     def __len__(self):
         return len(self.wimgs)

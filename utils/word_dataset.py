@@ -2,6 +2,7 @@ import io
 import os
 import numpy as np
 import torch
+from PIL import Image
 from torch.utils.data import Dataset
 from os.path import isfile
 from skimage.transform import resize
@@ -166,6 +167,9 @@ class WordLineDataset(Dataset):
         # attached externally (see train.py::build_style_cache). When set,
         # __getitem__ returns cached style vectors instead of raw style crops.
         self.style_cache = None
+        # Memmap pixel array when loaded from a stage-4 split dir, else None
+        # (images then live in self.data[i][0] as before).
+        self.images = None
 
     def __finalize__(self):
         """
@@ -181,15 +185,25 @@ class WordLineDataset(Dataset):
         save_path = "./saved_iam_data"
         if os.path.exists(save_path) is False:
             os.makedirs(save_path, exist_ok=True)
-        save_file = "{}/{}_{}_{}.pt".format(
-            save_path, self.subset, self.segmentation_level, self.setname
-        )  # dataset_path + '/' + set + '_' + level + '_IAM.pt'
 
-        if isfile(save_file) is False:
-            data = self.main_loader(self.subset, self.segmentation_level)
-            torch.save(data, save_file)  # Uncomment this in 'release' version
+        # Prefer the stage-4 memmap split dir if present (zero-decode, fork-safe);
+        # otherwise fall back to the legacy .pt cache (build it if missing).
+        mm_dir = "{}/{}_word_{}".format(save_path, self.setname.lower(), self.subset)
+        from utils.memmap_dataset import split_exists  # lazy: no msgpack for .pt path
+
+        if split_exists(mm_dir):
+            data = self._load_memmap(mm_dir)
         else:
-            data = torch.load(save_file, weights_only=True)
+            self.images = None
+            save_file = "{}/{}_{}_{}.pt".format(
+                save_path, self.subset, self.segmentation_level, self.setname
+            )  # dataset_path + '/' + set + '_' + level + '_IAM.pt'
+
+            if isfile(save_file) is False:
+                data = self.main_loader(self.subset, self.segmentation_level)
+                torch.save(data, save_file)  # Uncomment this in 'release' version
+            else:
+                data = torch.load(save_file, weights_only=True)
 
         self.data = data
         self.initial_writer_ids = [d[2] for d in data]
@@ -217,6 +231,24 @@ class WordLineDataset(Dataset):
             self.max_transcr_len = self.max_transcr_len
         # END FINALIZE
 
+    def _load_memmap(self, mm_dir):
+        """Load a stage-4 memmap split. Returns a ``data`` list of
+        ``(None, transcr, wid, id)`` tuples (images live in ``self.images``), so
+        every downstream consumer that reads ``data[i][1:]`` is unchanged."""
+        from utils import memmap_dataset as mm
+
+        self.images = mm.load_images(mm_dir)
+        meta = mm.load_meta(mm_dir)
+        print("loaded memmap split", mm_dir, "N=", len(meta))
+        return [(None, m["transcr"], m["wid"], m.get("id", "")) for m in meta]
+
+    def _img(self, index):
+        """The word crop at ``index`` as a PIL image, from the memmap array or
+        the stored object."""
+        if self.images is not None:
+            return Image.fromarray(np.asarray(self.images[index]))
+        return self.data[index][0]
+
     def _build_writer_index(self):
         # Precompute writer_id -> sample indices once so __getitem__ can draw
         # same-writer positives/style crops in O(1) instead of rescanning the
@@ -234,7 +266,7 @@ class WordLineDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, index):
-        img = self.data[index][0]
+        img = self._img(index)
         img_path = self.data[index][3]
         if self.transforms is not None:
             img = self.transforms(img)
@@ -254,7 +286,7 @@ class WordLineDataset(Dataset):
             random_samples = random.sample(self.writer_to_indices[wid], k=5)
 
         cor_index = random.sample(positive_long, k=1)[0]
-        cor_im = self.data[cor_index][0]
+        cor_im = self._img(cor_index)
         cor_im = self.transforms(cor_im)
 
         """
@@ -270,7 +302,7 @@ class WordLineDataset(Dataset):
             # The in-loop style CNN pass in train.py is skipped entirely.
             s_imgs = self.style_cache[random_samples]
         else:
-            st_imgs = [self.transforms(self.data[i][0]) for i in random_samples]
+            st_imgs = [self.transforms(self._img(i)) for i in random_samples]
             s_imgs = torch.stack(st_imgs)
 
         return (

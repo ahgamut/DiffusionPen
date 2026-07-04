@@ -35,6 +35,39 @@ class RelWordIndices:
         return raw
 
 
+class PlacerStore:
+    """Uniform view over placer data regardless of backend: ``words`` (list of
+    Word), ``wimgs`` (indexable to RGB bytes), ``sequences`` (per-paragraph row
+    lists, memmap only), ``pairs`` (in-line RelWordIndices)."""
+
+    def __init__(self, words, wimgs, sequences=None, pairs=None):
+        self.words = words
+        self.wimgs = wimgs
+        self.sequences = sequences
+        self.pairs = pairs
+
+
+def load_placer_store(savefolder="./saved_iam_data"):
+    """Prefer the stage-4 memmap dir (``iam_placer/``); else the legacy
+    ``placer_IAM.pt``. Both expose ``wimgs[i]`` as RGB bytes for Image.frombytes."""
+    mm_dir = os.path.join(savefolder, "iam_placer")
+    from utils import memmap_dataset as mm  # lazy: no msgpack for the .pt path
+
+    if mm.split_exists(mm_dir):
+        images = mm.load_images(mm_dir)
+        meta = mm.load_meta(mm_dir)
+        index = mm.load_index(mm_dir)
+        words = [Word.from_dict(m) for m in meta]
+        pairs = [RelWordIndices(c, n) for c, n in index.get("pairs", [])]
+        print("loaded memmap placer", mm_dir, "N=", len(words))
+        return PlacerStore(words, mm.WimgsView(images), index.get("sequences"), pairs)
+
+    raw = torch.load(os.path.join(savefolder, "placer_IAM.pt"), weights_only=False)
+    words = [Word.from_bytes(x) for x in raw["words"]]
+    pairs = [RelWordIndices.from_bytes(x) for x in raw["pairs"]]
+    return PlacerStore(words, raw["wimgs"], None, pairs)
+
+
 def line_of_word(word):
     return word.idd.split("-")[2]
 
