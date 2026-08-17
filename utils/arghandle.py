@@ -29,6 +29,11 @@ def add_common_args(parser):
         help="IAM-space tag for build_style_bank / generation; training ignores it "
         "(train.py always uses the merged MergedWordDataset)",
     )
+    parser.add_argument(
+        "--style-classes", type=int, default=0,
+        help="override the writer-class count at inference (0 = auto-detect from "
+        "the UNet checkpoint's label_emb; set W for a merged-trained model)",
+    )
     parser.add_argument("--img-size", type=int, default=(64, 256))
     # UNET parameters
     parser.add_argument("--channels", type=int, default=4)

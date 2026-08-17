@@ -13,10 +13,29 @@ from models import UNetModel, ImageEncoder, Diffusion, WordPlacer, WordUpsampler
 from utils.auxiliary_functions import get_default_character_classes
 
 
+def _embedding_rows(state_dict, suffix):
+    """Row count of the first param whose key ends with ``suffix`` (an
+    ``nn.Embedding.weight``), or None. Used to size a model to match its own
+    checkpoint's writer-class count -- IAM 339 or the merged W, transparently."""
+    for k, v in state_dict.items():
+        if k.endswith(suffix):
+            return int(v.shape[0])
+    return None
+
+
 def load_models(args):
     character_classes = get_default_character_classes()
     vocab_size = len(character_classes)
-    style_classes = 339  # IAM Dataset
+
+    # Writer-class count. Prefer an explicit override; else read it off the UNet
+    # checkpoint's label_emb so the model is built to match whatever it was
+    # trained on (single IAM = 339, merged = W), avoiding a load_state_dict
+    # shape mismatch / out-of-range style-bank lookups.
+    ckpt_path = f"{args.save_path}/models/ckpt.pt"
+    unet_sd = torch.load(ckpt_path, map_location=args.device, weights_only=True)
+    override = int(getattr(args, "style_classes", 0) or 0)
+    style_classes = override or _embedding_rows(unet_sd, "label_emb.weight") or 339
+    print("style_classes (writer count):", style_classes)
 
     idx = int("".join(filter(str.isdigit, args.device)))
     device_ids = [idx, idx + 1] if args.dataparallel else [idx]
@@ -90,13 +109,7 @@ def load_models(args):
     feature_extractor.requires_grad_(False)
     feature_extractor.eval()
 
-    unet.load_state_dict(
-        torch.load(
-            f"{args.save_path}/models/ckpt.pt",
-            map_location=args.device,
-            weights_only=True,
-        )
-    )
+    unet.load_state_dict(unet_sd)  # loaded above to size style_classes
     unet.eval()
 
     ema_model = copy.deepcopy(unet).eval().requires_grad_(False)
@@ -114,11 +127,13 @@ def load_models(args):
     placer = None
     placer_path = getattr(args, "placer_path", None)
     if placer_path and os.path.isfile(placer_path):
-        placer = WordPlacer(num_writers=style_classes)
+        placer_sd = torch.load(placer_path, map_location=args.device, weights_only=True)
+        # Size the placer to its own checkpoint's writer space (may differ from
+        # the UNet's -- the placer trains on IAM-only paragraph data).
+        placer_writers = _embedding_rows(placer_sd, "writer_emb.weight") or style_classes
+        placer = WordPlacer(num_writers=placer_writers)
         placer = DataParallel(placer, device_ids=device_ids)
-        placer.load_state_dict(
-            torch.load(placer_path, map_location=args.device, weights_only=True)
-        )
+        placer.load_state_dict(placer_sd)
         placer = placer.to(args.device)
         placer.eval()
         placer.requires_grad_(False)
