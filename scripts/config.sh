@@ -10,7 +10,13 @@ export DP_ROOT="${DP_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 # ---- runtime ----
 export DEVICE="${DEVICE:-cuda:0}"          # single-GPU device string
-export DATASET="${DATASET:-iam}"           # iam | gnhk | cvl (where supported)
+# Training uses the single merged dataset (MergedWordDataset); DATASET only tags
+# build_style_bank / generation (IAM-space inference paths).
+export DATASET="${DATASET:-iam}"
+# ---- merged dataset (single training format) ----
+export MULTIDATA_INPUT="${MULTIDATA_INPUT:-./sample-fmt}"   # raw folder w/ IAM/ CVL/ CSAFE/
+export MERGED_SETNAME="${MERGED_SETNAME:-combined}"          # -> saved_iam_data/<name>_word_<split>
+export SPLIT_NAME="${SPLIT_NAME:-train}"
 
 # ---- paths (match the argparse defaults; edit for your box) ----
 export SAVE_PATH="${SAVE_PATH:-./diffusionpen_iam_model_path}"

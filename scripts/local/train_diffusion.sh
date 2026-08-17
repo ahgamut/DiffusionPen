@@ -6,7 +6,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/../config.sh"
 cd "$DP_ROOT"
 
 $PY train.py \
-  --dataset "$DATASET" \
+  --merged-setname "$MERGED_SETNAME" \
   --device "$DEVICE" \
   --epochs "$EPOCHS" \
   --batch-size "$BATCH_SIZE" \

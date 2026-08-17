@@ -39,8 +39,9 @@ scripts/local/train_diffusion.sh --load-check           # extra flag pass-throug
 ```bash
 pip install msgpack                                      # stage-4 format dep
 
-scripts/local/build_data.sh                              # -> saved_iam_data/*_word_*/ , iam_placer/
-scripts/local/build_style_bank.sh                        # -> saved_iam_data/style_bank.pt
+MULTIDATA_INPUT=./sample-fmt scripts/local/build_multidataset.sh   # -> saved_iam_data/combined_word_train/ (the training data)
+scripts/local/build_data.sh                              # -> saved_iam_data/iam_placer/ (placer only)
+scripts/local/build_style_bank.sh                        # -> saved_iam_data/style_bank.pt  (rebuild to W writers)
 scripts/local/train_diffusion.sh                         # -> $SAVE_PATH/models/{ckpt,ema_ckpt}.pt
 scripts/local/train_placer.sh                            # -> $PLACER_CKPT
 scripts/local/train_upsampler.sh                         # -> $UPSAMPLER_CKPT
