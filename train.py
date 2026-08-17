@@ -16,9 +16,6 @@ from torchvision import transforms
 
 #
 from models import UNetModel, ImageEncoder, EMA, Diffusion, AvgMeter
-from utils.cvl_dataset import CVLDataset
-from utils.iam_dataset import IAMDataset
-from utils.GNHK_dataset import GNHK_Dataset
 from utils.word_dataset import MergedWordDataset
 from utils.auxiliary_functions import *
 from utils.generation import save_image_grid, setup_logging
@@ -66,124 +63,16 @@ print("num of character classes", char_classes)
 vocab_size = char_classes + num_tokens
 
 
-def build_IAMDataset(args, transform):
-    iam_folder = "./iam_data/words"
-    myDataset = IAMDataset
-    style_classes = 339
-    if args.level == "word":
-        train_data = myDataset(
-            iam_folder,
-            "train",
-            "word",
-            fixed_size=(1 * 64, 256),
-            tokenizer=None,
-            text_encoder=None,
-            feat_extractor=None,
-            transforms=transform,
-            args=args,
-        )
-    else:
-        train_data = myDataset(
-            iam_folder,
-            "train",
-            "word",
-            fixed_size=(1 * 64, 256),
-            tokenizer=None,
-            text_encoder=None,
-            feat_extractor=None,
-            transforms=transform,
-            args=args,
-        )
-        test_data = myDataset(
-            iam_folder,
-            "test",
-            "word",
-            fixed_size=(1 * 64, 256),
-            tokenizer=None,
-            text_encoder=None,
-            feat_extractor=None,
-            transforms=transform,
-            args=args,
-        )
-    print("train data", len(train_data))
-
-    test_size = args.batch_size
-    rest = len(train_data) - test_size
-    test_data, _ = random_split(
-        train_data, [test_size, rest], generator=torch.Generator().manual_seed(42)
-    )
-    return train_data, test_data, style_classes
-
-
-def build_GNHKDataset(args, transform):
-    myDataset = GNHK_Dataset
-    dataset_folder = args.gnhk_path
-    style_classes = 515
-    train_transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize(
-                (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
-            ),  # transforms.Normalize((0.5,), (0.5,)),  #
-        ]
-    )
-    train_data = myDataset(
-        dataset_folder,
-        "train",
-        "word",
-        fixed_size=(1 * 64, 256),
-        tokenizer=None,
-        text_encoder=None,
-        feat_extractor=None,
-        transforms=train_transform,
-        args=args,
-    )
-    test_size = args.batch_size
-    rest = len(train_data) - test_size
-    test_data, _ = random_split(
-        train_data, [test_size, rest], generator=torch.Generator().manual_seed(42)
-    )
-    return train_data, test_data, style_classes
-
-
-def build_CVLDataset(args, transform):
-    cvl_folder = "./cvl_data"
-    style_classes = CVLDataset.STYLE_CLASSES
-    train_data = CVLDataset(
-        cvl_folder,
-        "train",
-        "word",
-        fixed_size=(1 * 64, 256),
-        tokenizer=None,
-        text_encoder=None,
-        feat_extractor=None,
-        transforms=transform,
-        args=args,
-    )
-    test_data = CVLDataset(
-        cvl_folder,
-        "test",
-        "word",
-        fixed_size=(1 * 64, 256),
-        tokenizer=None,
-        text_encoder=None,
-        feat_extractor=None,
-        transforms=transform,
-        args=args,
-    )
-    return train_data, test_data, style_classes
-
-
 def build_MergedDataset(args, transform):
-    """Merged IAM+CVL+CSAFE memmap split (built by utils/build_multidataset.py).
+    """The merged IAM+CVL+CSAFE memmap split (built by utils/build_multidataset.py)
+    -- the only training dataset in this codebase.
 
     ``style_classes`` is the merged writer count W (read off the loaded split), so
     the style bank / placer / model must be sized to the same W. The split name
     prefix defaults to ``combined`` (``--merged-setname`` to override)."""
     setname = getattr(args, "merged_setname", "combined")
     train_data = MergedWordDataset(
-        "train", fixed_size=(1 * 64, 256), transforms=transform, args=args,
-        setname=setname,
+        "train", transforms=transform, args=args, setname=setname,
     )
     style_classes = train_data.wclasses
     print("merged writers (style_classes):", style_classes)
@@ -408,10 +297,9 @@ def main():
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--level", type=str, default="word", help="word, line")
     parser.add_argument("--style-name", default="mobilenetv2_100", type=str)
-    parser.add_argument("--gnhk-path", type=str, default="", help="path to GNHK dataset root")
     parser.add_argument(
         "--merged-setname", type=str, default="combined",
-        help="split-name prefix for --dataset combined (resolves "
+        help="split-name prefix for the merged dataset (resolves "
         "saved_iam_data/<prefix>_word_<subset>)",
     )
     parser.add_argument("--style-cache", dest="style_cache", action="store_true")
@@ -437,24 +325,10 @@ def main():
         ]
     )
 
-    if args.dataset == "iam":
-        print("loading IAM")
-        train_data, test_data, style_classes = build_IAMDataset(args, transform)
-
-    elif args.dataset == "gnhk":
-        print("loading GNHK")
-        train_data, test_data, style_classes = build_GNHKDataset(args, transform)
-
-    elif args.dataset == "cvl":
-        print("loading CVL")
-        train_data, test_data, style_classes = build_CVLDataset(args, transform)
-
-    elif args.dataset == "combined":
-        print("loading merged (IAM+CVL+CSAFE) memmap split")
-        train_data, test_data, style_classes = build_MergedDataset(args, transform)
-
-    else:
-        raise ValueError("unknown dataset!")
+    # Single training dataset: the merged memmap split built by
+    # utils/build_multidataset.py (see MergedWordDataset).
+    print("loading merged (IAM+CVL+CSAFE) memmap split")
+    train_data, test_data, style_classes = build_MergedDataset(args, transform)
 
     # Worker-dependent flags only make sense with >0 workers.
     loader_kwargs = dict(pin_memory=True)

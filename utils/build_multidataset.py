@@ -46,16 +46,15 @@ DATASET_DIRS = {"iam": "IAM", "cvl": "CVL", "csafe": "CSAFE"}
 
 
 # --------------------------------------------------------------------------- #
-# crop normalization (kept identical to the existing IAM/CVL word-crop path)
+# crop normalization -- the single canonical word-crop geometry for training
 # --------------------------------------------------------------------------- #
 def normalize_word_crop(img, transcr):
     """Coerce a word image to a 256x64 RGB ``PIL.Image``.
 
-    Mirrors ``utils/iam_dataset.py`` / ``utils/cvl_dataset.py``: resize to height
-    64 keeping aspect; if the result is still wider than 256, shrink it ~20px at a
-    time and center it; otherwise white-pad it to 256 wide. Punctuation-only words
-    are centered directly. (The two existing loaders differ only trivially in the
-    pad-vs-shrink ordering; this is the canonical order used for all datasets.)
+    Resize to height 64 keeping aspect; if the result is still wider than 256,
+    shrink it ~20px at a time and center it; otherwise white-pad it to 256 wide.
+    Punctuation-only words are centered directly. This is the one geometry every
+    dataset is baked into, so all merged crops are directly comparable.
     """
     img = img.convert("RGB")
     if transcr in string.punctuation:

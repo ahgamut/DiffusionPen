@@ -9,10 +9,7 @@ import torch.optim as optim
 import time
 
 #
-from utils.style_dataset import (
-    IAMStyleDataset,
-)
-from utils.cvl_dataset import CVLStyleDataset
+from utils.word_dataset import MergedWordDataset
 from utils.auxiliary_functions import (
     affine_transformation,
 )
@@ -431,8 +428,10 @@ def train_triplet(
 ### BUILDING DATASETS
 
 
-def build_IAMDataset(args):
-    dataset_folder = args.data_path
+def build_style_dataset(args):
+    """Style-encoder pretraining data over the merged memmap split
+    (``MergedWordDataset`` in style_mode -> anchor/positive/negative triplets).
+    ``style_classes`` is the merged writer count W."""
     train_transform = transforms.Compose(
         [
             transforms.ToTensor(),
@@ -440,23 +439,19 @@ def build_IAMDataset(args):
         ]
     )
 
-    train_data = IAMStyleDataset(
-        dataset_folder,
+    full = MergedWordDataset(
         "train",
-        "word",
-        fixed_size=(1 * 64, 256),
         transforms=train_transform,
+        args=args,
+        setname=getattr(args, "merged_setname", "combined"),
+        style_mode=True,
     )
+    style_classes = full.wclasses
 
-    # split with torch.utils.data.Subset into train and val
-    validation_size = int(0.2 * len(train_data))
-
-    # Calculate the size of the training set
-    train_size = len(train_data) - validation_size
-
-    # Use random_split to split the dataset into train and validation sets
+    validation_size = int(0.2 * len(full))
+    train_size = len(full) - validation_size
     train_data, val_data = random_split(
-        train_data,
+        full,
         [train_size, validation_size],
         generator=torch.Generator().manual_seed(42),
     )
@@ -466,58 +461,9 @@ def build_IAMDataset(args):
     train_loader = DataLoader(
         train_data, batch_size=args.batch_size, shuffle=True, num_workers=4
     )
-
     val_loader = DataLoader(
         val_data, batch_size=args.batch_size, shuffle=False, num_workers=4
     )
-    if val_loader is None:
-        print("No validation data")
-
-    style_classes = 339
-    return train_data, val_data, train_loader, val_loader, style_classes
-
-
-def build_CVLDataset(args):
-    dataset_folder = args.data_path
-    train_transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-        ]
-    )
-
-    train_data = CVLStyleDataset(
-        basefolder=dataset_folder,
-        subset="train",
-        segmentation_level="word",
-        fixed_size=(1 * 64, 256),
-        transforms=train_transform,
-    )
-
-    # split with torch.utils.data.Subset into train and val
-    validation_size = int(0.2 * len(train_data))
-
-    # Calculate the size of the training set
-    train_size = len(train_data) - validation_size
-
-    # Use random_split to split the dataset into train and validation sets
-    train_data, val_data = random_split(
-        train_data,
-        [train_size, validation_size],
-        generator=torch.Generator().manual_seed(42),
-    )
-    print("len train data", len(train_data))
-    print("len val data", len(val_data))
-
-    train_loader = DataLoader(
-        train_data, batch_size=args.batch_size, shuffle=True, num_workers=4
-    )
-
-    val_loader = DataLoader(
-        val_data, batch_size=args.batch_size, shuffle=False, num_workers=4
-    )
-
-    style_classes = CVLStyleDataset.STYLE_CLASSES
     return train_data, val_data, train_loader, val_loader, style_classes
 
 
@@ -554,8 +500,15 @@ def main():
         default="mobilenetv2_100",
         help="type of cnn to use (resnet, densenet, etc.)",
     )
-    parser.add_argument("--dataset", type=str, default="iam", help="dataset name")
-    parser.add_argument("--data-path", default="./iam_data", help="path to data")
+    parser.add_argument(
+        "--merged-setname", type=str, default="combined",
+        help="split-name prefix for the merged dataset (resolves "
+        "saved_iam_data/<prefix>_word_<subset>)",
+    )
+    parser.add_argument(
+        "--dataset", type=str, default="combined",
+        help="tag used only in saved checkpoint filenames",
+    )
     parser.add_argument(
         "--batch_size", type=int, default=320, help="input batch size for training"
     )
@@ -597,18 +550,9 @@ def main():
     if not os.path.exists(args.save_path):
         os.makedirs(args.save_path)
 
-    if args.dataset == "iam":
-        train_data, val_data, train_loader, val_loader, style_classes = (
-            build_IAMDataset(args)
-        )
-    elif args.dataset == "cvl":
-        train_data, val_data, train_loader, val_loader, style_classes = (
-            build_CVLDataset(args)
-        )
-    else:
-        raise RuntimeError(
-            "You need to add your own dataset and define the number of style classes!!!"
-        )
+    train_data, val_data, train_loader, val_loader, style_classes = (
+        build_style_dataset(args)
+    )
 
     if args.model == "mobilenetv2_100":
         print("Using mobilenetv2_100")

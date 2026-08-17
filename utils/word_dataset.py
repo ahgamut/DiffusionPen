@@ -1,259 +1,95 @@
-import io
+"""Single training-data Dataset over the merged memmap format.
+
+``MergedWordDataset`` is the one dataset class used for training in this
+codebase. It reads only the stage-4 memmap split produced by
+``utils/build_multidataset.py`` (IAM + CVL + CSAFE unified, writers in a global
+id space); there is no legacy ``.pt`` / raw-parse fallback -- the split must
+already exist on disk.
+
+It serves both trainers via ``style_mode``:
+
+- ``style_mode=False`` (default) -- the diffusion loop; ``__getitem__`` returns
+  ``(img, transcr, wid, s_imgs[5], img_path, cor_im)``.
+- ``style_mode=True`` -- style-encoder pretraining; ``__getitem__`` returns
+  ``(img, transcr, wid, positive, negative, s_imgs[5])`` with a same-writer
+  ``positive`` and a different-writer ``negative`` for the triplet loss.
+
+Same-writer sampling is O(1) via the split's ``by_writer`` / ``by_writer_long``
+index. The DataLoaders use the default collate (tensors stack, strings become
+lists), so this class deliberately provides no ``collate_fn``.
+"""
+
 import os
+import random
+
 import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
-from os.path import isfile
-from skimage.transform import resize
-import tqdm
-import json
-import random
 
-#
+from utils import memmap_dataset as mm
 
-#
-
-# OV = True
-MAX_CHARS = 40
-OUTPUT_MAX_LEN = MAX_CHARS  # + 2  # <GO>+groundtruth+<END>
-IMG_WIDTH = 256
-IMG_HEIGHT = 64
+SAVE_ROOT = "./saved_iam_data"
 
 
-def labelDictionary():
-    # labels = list(string.ascii_lowercase + string.ascii_uppercase)
-    # print('labels',labels)
-    labels = [
-        "!",
-        '"',
-        "#",
-        "&",
-        "'",
-        "(",
-        ")",
-        "*",
-        "+",
-        ",",
-        "-",
-        ".",
-        "/",
-        "0",
-        "1",
-        "2",
-        "3",
-        "4",
-        "5",
-        "6",
-        "7",
-        "8",
-        "9",
-        ":",
-        ";",
-        "?",
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "G",
-        "H",
-        "I",
-        "J",
-        "K",
-        "L",
-        "M",
-        "N",
-        "O",
-        "P",
-        "Q",
-        "R",
-        "S",
-        "T",
-        "U",
-        "V",
-        "W",
-        "X",
-        "Y",
-        "Z",
-        "a",
-        "b",
-        "c",
-        "d",
-        "e",
-        "f",
-        "g",
-        "h",
-        "i",
-        "j",
-        "k",
-        "l",
-        "m",
-        "n",
-        "o",
-        "p",
-        "q",
-        "r",
-        "s",
-        "t",
-        "u",
-        "v",
-        "w",
-        "x",
-        "y",
-        "z",
-        " ",
-    ]
-    letter2index = {label: n for n, label in enumerate(labels)}
-    # create json object from dictionary if you want to save writer ids
-    json_dict_l = json.dumps(letter2index)
-    l = open("utils/letter2index.json", "w")
-    l.write(json_dict_l)
-    l.close()
-    index2letter = {v: k for k, v in letter2index.items()}
-    json_dict_i = json.dumps(index2letter)
-    l = open("utils/index2letter.json", "w")
-    l.write(json_dict_i)
-    l.close()
-    return len(labels), letter2index, index2letter
+def _sample(pool, k):
+    """k indices from pool: without replacement when possible, else with
+    replacement (merged writers vary in crop count, unlike the old IAM-only
+    loader which assumed every writer had >= 5 crops)."""
+    if len(pool) >= k:
+        return random.sample(pool, k)
+    return [random.choice(pool) for _ in range(k)]
 
 
-char_classes, letter2index, index2letter = labelDictionary()
-tok = False
-if not tok:
-    tokens = {"PAD_TOKEN": 80}
-else:
-    tokens = {"GO_TOKEN": 80, "END_TOKEN": 81, "PAD_TOKEN": 82}
-num_tokens = len(tokens.keys())
-print("num_tokens", num_tokens)
-
-
-class WordLineDataset(Dataset):
-    """
-    This class is a generic Dataset class meant to be used for word- and line- image datasets.
-    It should not be used directly, but inherited by a dataset-specific class.
-    """
-
+class MergedWordDataset(Dataset):
     def __init__(
         self,
-        basefolder: str = "datasets/",  # Root folder
-        subset: str = "all",  # Name of dataset subset to be loaded. (e.g. 'all', 'train', 'test', 'fold1', etc.)
-        segmentation_level: str = "line",  # Type of data to load ('line' or 'word')
-        fixed_size: tuple = (128, None),  # Resize inputs to this size
-        tokenizer=None,
-        text_encoder=None,
-        feat_extractor=None,
-        transforms: list = None,  # List of augmentation transform functions to be applied on each input
-        character_classes: list = None,  # If 'None', these will be autocomputed. Otherwise, a list of characters is expected.
-        # Feature extractor to be used for text encoding
+        subset,
+        transforms=None,
+        args=None,
+        setname="combined",
+        style_mode=False,
     ):
-
-        self.basefolder = basefolder
         self.subset = subset
-        self.segmentation_level = segmentation_level
-        self.fixed_size = fixed_size
         self.transforms = transforms
-        self.setname = None  # E.g. 'IAM'. This should coincide with the folder name
-        self.stopwords = []
-        self.stopwords_path = None
-        self.character_classes = character_classes
-        self.max_transcr_len = 0
-        self.tokenizer = tokenizer
-        self.text_encoder = text_encoder
-        self.output_max_len = OUTPUT_MAX_LEN
-        self.feat_extractor = feat_extractor
+        self.args = args
+        self.setname = setname
+        self.style_mode = style_mode
         # Optional [N, feat] tensor of precomputed frozen style-CNN features,
-        # attached externally (see train.py::build_style_cache). When set,
-        # __getitem__ returns cached style vectors instead of raw style crops.
+        # attached externally by train.py::build_style_cache; when set, the
+        # diffusion path returns cached style vectors instead of raw crops.
         self.style_cache = None
-        # Memmap pixel array when loaded from a stage-4 split dir, else None
-        # (images then live in self.data[i][0] as before).
-        self.images = None
 
-    def __finalize__(self):
-        """
-        Will call code after descendant class has specified 'key' variables
-        and ran dataset-specific code
-        """
-        assert self.setname is not None
-        if self.stopwords_path is not None:
-            for line in open(self.stopwords_path):
-                self.stopwords.append(line.strip().split(","))
-            self.stopwords = self.stopwords[0]
-
-        save_path = "./saved_iam_data"
-        if os.path.exists(save_path) is False:
-            os.makedirs(save_path, exist_ok=True)
-
-        # Prefer the stage-4 memmap split dir if present (zero-decode, fork-safe);
-        # otherwise fall back to the legacy .pt cache (build it if missing).
-        mm_dir = "{}/{}_word_{}".format(save_path, self.setname.lower(), self.subset)
-        from utils.memmap_dataset import split_exists  # lazy: no msgpack for .pt path
-
-        if split_exists(mm_dir):
-            data = self._load_memmap(mm_dir)
-        else:
-            self.images = None
-            save_file = "{}/{}_{}_{}.pt".format(
-                save_path, self.subset, self.segmentation_level, self.setname
-            )  # dataset_path + '/' + set + '_' + level + '_IAM.pt'
-
-            if isfile(save_file) is False:
-                data = self.main_loader(self.subset, self.segmentation_level)
-                torch.save(data, save_file)  # Uncomment this in 'release' version
-            else:
-                data = torch.load(save_file, weights_only=True)
-
-        self.data = data
-        self.initial_writer_ids = [d[2] for d in data]
-
-        writer_ids, _ = np.unique([d[2] for d in data], return_inverse=True)
-        self.writer_ids = writer_ids
-        self.wclasses = len(writer_ids)
-        print("Number of writers", self.wclasses)
-        self._build_writer_index()
-        if self.character_classes is None:
-            res = set()
-            # compute character classes given input transcriptions
-            for _, transcr, _, _ in tqdm.tqdm(data):
-                # print('legth transcr = ', len(transcr))
-                res.update(list(transcr))
-                self.max_transcr_len = max(self.max_transcr_len, len(transcr))
-                # print('self.max_transcr_len', self.max_transcr_len)
-            res = sorted(list(res))
-            res.append(" ")
-            print(
-                "Character classes: {} ({} different characters)".format(res, len(res))
+        mm_dir = os.path.join(SAVE_ROOT, "{}_word_{}".format(setname.lower(), subset))
+        if not mm.split_exists(mm_dir):
+            raise RuntimeError(
+                "merged split {} not found -- build it first:\n"
+                "  python -m utils.build_multidataset --input <folder> "
+                "--split-name {}".format(mm_dir, subset)
             )
-            print("Max transcription length: {}".format(self.max_transcr_len))
-            self.character_classes = res
-            self.max_transcr_len = self.max_transcr_len
-        # END FINALIZE
-
-    def _load_memmap(self, mm_dir):
-        """Load a stage-4 memmap split. Returns a ``data`` list of
-        ``(None, transcr, wid, id)`` tuples (images live in ``self.images``), so
-        every downstream consumer that reads ``data[i][1:]`` is unchanged."""
-        from utils import memmap_dataset as mm
-
-        self.images = mm.load_images(mm_dir)
+        self.images = mm.load_images(mm_dir)  # read-only, fork-safe memmap
         meta = mm.load_meta(mm_dir)
-        print("loaded memmap split", mm_dir, "N=", len(meta))
-        return [(None, m["transcr"], m["wid"], m.get("id", "")) for m in meta]
+        index = mm.load_index(mm_dir)
+        # data rows keep the old (None, transcr, wid, id) shape; pixels live in
+        # self.images and are fetched lazily via _img().
+        self.data = [(None, m["transcr"], m["wid"], m.get("id", "")) for m in meta]
+        print("loaded merged split", mm_dir, "N=", len(self.data))
 
-    def _img(self, index):
-        """The word crop at ``index`` as a PIL image, from the memmap array or
-        the stored object."""
-        if self.images is not None:
-            return Image.fromarray(np.asarray(self.images[index]))
-        return self.data[index][0]
+        self.initial_writer_ids = [d[2] for d in self.data]
+        self.writer_ids = [int(w) for w in np.unique(self.initial_writer_ids)]
+        self.wclasses = len(self.writer_ids)
+        print("Number of writers", self.wclasses)
+
+        # writer -> row-indices for O(1) same-writer sampling (from the split's
+        # index; "_long" keeps only transcriptions with len > 3).
+        by_w = index.get("by_writer", {})
+        by_wl = index.get("by_writer_long", {})
+        self.writer_to_indices = {int(k): list(v) for k, v in by_w.items()}
+        self.writer_to_indices_long = {int(k): list(v) for k, v in by_wl.items()}
+        if not self.writer_to_indices:
+            self._build_writer_index()
 
     def _build_writer_index(self):
-        # Precompute writer_id -> sample indices once so __getitem__ can draw
-        # same-writer positives/style crops in O(1) instead of rescanning the
-        # whole dataset every call (previously O(N) per sample => O(N^2)/epoch).
-        # "_long" keeps only transcriptions with len > 3, matching the old filter.
         self.writer_to_indices = {}
         self.writer_to_indices_long = {}
         for i, p in enumerate(self.data):
@@ -262,204 +98,62 @@ class WordLineDataset(Dataset):
             if len(p[1]) > 3:
                 self.writer_to_indices_long.setdefault(wid, []).append(i)
 
+    def _img(self, index):
+        """Word crop at ``index`` as a PIL image, from the memmap array."""
+        return Image.fromarray(np.asarray(self.images[index]))
+
+    def _same_writer_pool(self, wid):
+        """Prefer long-transcription crops; fall back to all of the writer's."""
+        return self.writer_to_indices_long.get(wid) or self.writer_to_indices[wid]
+
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, index):
+        if self.style_mode:
+            return self._getitem_style(index)
+        return self._getitem_diffusion(index)
+
+    def _getitem_diffusion(self, index):
         img = self._img(index)
         img_path = self.data[index][3]
         if self.transforms is not None:
             img = self.transforms(img)
-        # save_image(img, 'check_style.png')
         transcr = self.data[index][1]
         wid = self.data[index][2]
 
-        # pick other samples from the same writer id (see _build_writer_index)
-        positive_long = self.writer_to_indices_long.get(wid, [])
-        # Make sure you have at least 5 matching images
-        if len(positive_long) >= 5:
-            # Randomly select 5 indices from the matching_indices
-            random_samples = random.sample(positive_long, k=5)
-        else:
-            # Handle the case where there are fewer than 5 matching images (if needed)
-            # print("Not enough matching images with writer ID", wid)
-            random_samples = random.sample(self.writer_to_indices[wid], k=5)
+        pool = self._same_writer_pool(wid)
+        random_samples = _sample(pool, 5)
+        cor_im = self.transforms(self._img(random.choice(pool)))
 
-        cor_index = random.sample(positive_long, k=1)[0]
-        cor_im = self._img(cor_index)
-        cor_im = self.transforms(cor_im)
-
-        """
-        pos_image = random.sample(positive_samples, k=1)
-        neg_image = random.sample(negative_samples, k=1)
-        pos_image = pos_image[0][0]
-        neg_image = neg_image[0][0]
-        pos_image = self.transforms(pos_image)
-        neg_image = self.transforms(neg_image)
-        """
         if self.style_cache is not None:
-            # Gather precomputed frozen style-CNN features by index -> (5, feat).
-            # The in-loop style CNN pass in train.py is skipped entirely.
+            # gather precomputed frozen style features by index -> (5, feat)
             s_imgs = self.style_cache[random_samples]
         else:
-            st_imgs = [self.transforms(self._img(i)) for i in random_samples]
-            s_imgs = torch.stack(st_imgs)
+            s_imgs = torch.stack([self.transforms(self._img(i)) for i in random_samples])
 
-        return (
-            img,
-            transcr,
-            wid,
-            s_imgs,
-            img_path,
-            cor_im,
-        )  # , pos_image, neg_image #, style_features#, printed_word, bbox#, tok_transcr
+        return img, transcr, wid, s_imgs, img_path, cor_im
 
-    def collate_fn(self, batch):
-        # Separate image tensors and caption tensors
-        img, transcr, wid, s_imgs, img_path, cor_im = zip(*batch)
+    def _getitem_style(self, index):
+        img = self._img(index)
+        transcr = self.data[index][1]
+        wid = self.data[index][2]
 
-        # context = [item.detach() for item in transcr]  # Detach context tensors
-        transcr = torch.stack(transcr)
-        # context = tok_transcr#torch.stack(tok_transcr)
+        pool = self._same_writer_pool(wid)
+        positive = self._img(random.choice(pool))
 
-        # Stack image tensors and caption tensors into batches
-        images_batch = torch.stack(img)
+        neg_wid = random.choice(self.writer_ids)
+        while neg_wid == wid and self.wclasses > 1:
+            neg_wid = random.choice(self.writer_ids)
+        negative = self._img(random.choice(self.writer_to_indices[neg_wid]))
 
-        s_imgs = torch.stack(s_imgs)
-
-        # printed_word = torch.stack(printed_word)
-        # bbox = torch.stack(bbox)
-        cor_images_batch = torch.stack(cor_im)
-        # pos_images_batch = torch.stack(pos_image)
-        # neg_images_batch = torch.stack(neg_image)
-
-        return (
-            images_batch,
-            transcr,
-            wid,
-            s_imgs,
-            img_path,
-            cor_images_batch,
-        )  # , pos_images_batch, neg_images_batch#, printed_word, bbox#, context
-
-    def main_loader(self, subset, segmentation_level) -> list:
-        # This function should be implemented by an inheriting class.
-        raise NotImplementedError
-
-    def check_size(self, img, min_image_width_height, fixed_image_size=None):
-        """
-        checks if the image accords to the minimum and maximum size requirements
-        or fixed image size and resizes if not
-
-        :param img: the image to be checked
-        :param min_image_width_height: the minimum image size
-        :param fixed_image_size:
-        """
-        if fixed_image_size is not None:
-            if len(fixed_image_size) != 2:
-                raise ValueError("The requested fixed image size is invalid!")
-            new_img = resize(
-                image=img, output_shape=fixed_image_size[::-1], mode="constant"
-            )
-            new_img = new_img.astype(np.float32)
-            return new_img
-        elif np.amin(img.shape[:2]) < min_image_width_height:
-            if np.amin(img.shape[:2]) == 0:
-                print("OUCH")
-                return None
-            scale = float(min_image_width_height + 1) / float(np.amin(img.shape[:2]))
-            new_shape = (int(scale * img.shape[0]), int(scale * img.shape[1]))
-            new_img = resize(image=img, output_shape=new_shape, mode="constant")
-            new_img = new_img.astype(np.float32)
-            return new_img
+        samples = _sample(pool, 5)
+        if self.transforms is not None:
+            img = self.transforms(img)
+            positive = self.transforms(positive)
+            negative = self.transforms(negative)
+            s_imgs = torch.stack([self.transforms(self._img(i)) for i in samples])
         else:
-            return img
+            s_imgs = None
 
-
-class MergedWordDataset(WordLineDataset):
-    """Word-level loader for a merged multi-dataset memmap split built by
-    ``utils/build_multidataset.py`` (IAM + CVL + CSAFE in one dir, writers in a
-    global id space). It reuses ``WordLineDataset`` wholesale -- the meta keys
-    (``transcr``/``wid``/``id``) already satisfy ``_load_memmap`` and the
-    ``by_writer``/``by_writer_long`` index drives O(1) same-writer sampling.
-
-    ``setname`` selects the split dir: ``__finalize__`` resolves
-    ``saved_iam_data/{setname.lower()}_word_{subset}`` -- so the default
-    ``"combined"`` matches the builder's default ``--out-name combined_word``.
-    There is no raw loader: the memmap split must already exist on disk.
-    """
-
-    def __init__(
-        self,
-        subset,
-        fixed_size=(64, 256),
-        transforms=None,
-        args=None,
-        setname="combined",
-    ):
-        super().__init__(
-            basefolder="",
-            subset=subset,
-            segmentation_level="word",
-            fixed_size=fixed_size,
-            tokenizer=None,
-            text_encoder=None,
-            feat_extractor=None,
-            transforms=transforms,
-            character_classes=None,
-        )
-        self.setname = setname
-        self.args = args
-        super().__finalize__()
-
-    def main_loader(self, subset, segmentation_level):
-        raise RuntimeError(
-            "merged split saved_iam_data/{}_word_{} not found -- build it first:\n"
-            "  python -m utils.build_multidataset --input <folder> "
-            "--split-name {}".format(self.setname.lower(), subset, subset)
-        )
-
-
-class LineListIO(object):
-    """
-    Helper class for reading/writing text files into lists.
-    The elements of the list are the lines in the text file.
-    """
-
-    @staticmethod
-    def read_list(filepath, encoding="ascii"):
-        if not os.path.exists(filepath):
-            raise ValueError("File for reading list does NOT exist: " + filepath)
-
-        linelist = []
-        if encoding == "ascii":
-            transform = lambda line: line.encode()
-        else:
-            transform = lambda line: line
-
-        with io.open(filepath, encoding=encoding) as stream:
-            for line in stream:
-                line = transform(line.strip())
-                if line != "":
-                    linelist.append(line)
-        return linelist
-
-    @staticmethod
-    def write_list(file_path, line_list, encoding="ascii", append=False, verbose=False):
-        """
-        Writes a list into the given file object
-
-        file_path: the file path that will be written to
-        line_list: the list of strings that will be written
-        """
-        mode = "w"
-        if append:
-            mode = "a"
-
-        with io.open(file_path, mode, encoding=encoding) as f:
-            if verbose:
-                line_list = tqdm.tqdm(line_list)
-
-            for l in line_list:
-                # f.write(unicode(l) + '\n')   Python 2
-                f.write(l + "\n")
+        return img, transcr, wid, positive, negative, s_imgs
