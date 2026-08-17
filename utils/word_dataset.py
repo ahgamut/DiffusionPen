@@ -376,6 +376,50 @@ class WordLineDataset(Dataset):
             return img
 
 
+class MergedWordDataset(WordLineDataset):
+    """Word-level loader for a merged multi-dataset memmap split built by
+    ``utils/build_multidataset.py`` (IAM + CVL + CSAFE in one dir, writers in a
+    global id space). It reuses ``WordLineDataset`` wholesale -- the meta keys
+    (``transcr``/``wid``/``id``) already satisfy ``_load_memmap`` and the
+    ``by_writer``/``by_writer_long`` index drives O(1) same-writer sampling.
+
+    ``setname`` selects the split dir: ``__finalize__`` resolves
+    ``saved_iam_data/{setname.lower()}_word_{subset}`` -- so the default
+    ``"combined"`` matches the builder's default ``--out-name combined_word``.
+    There is no raw loader: the memmap split must already exist on disk.
+    """
+
+    def __init__(
+        self,
+        subset,
+        fixed_size=(64, 256),
+        transforms=None,
+        args=None,
+        setname="combined",
+    ):
+        super().__init__(
+            basefolder="",
+            subset=subset,
+            segmentation_level="word",
+            fixed_size=fixed_size,
+            tokenizer=None,
+            text_encoder=None,
+            feat_extractor=None,
+            transforms=transforms,
+            character_classes=None,
+        )
+        self.setname = setname
+        self.args = args
+        super().__finalize__()
+
+    def main_loader(self, subset, segmentation_level):
+        raise RuntimeError(
+            "merged split saved_iam_data/{}_word_{} not found -- build it first:\n"
+            "  python -m utils.build_multidataset --input <folder> "
+            "--split-name {}".format(self.setname.lower(), subset, subset)
+        )
+
+
 class LineListIO(object):
     """
     Helper class for reading/writing text files into lists.

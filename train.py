@@ -19,6 +19,7 @@ from models import UNetModel, ImageEncoder, EMA, Diffusion, AvgMeter
 from utils.cvl_dataset import CVLDataset
 from utils.iam_dataset import IAMDataset
 from utils.GNHK_dataset import GNHK_Dataset
+from utils.word_dataset import MergedWordDataset
 from utils.auxiliary_functions import *
 from utils.generation import save_image_grid, setup_logging
 from utils.arghandle import add_common_args
@@ -169,6 +170,28 @@ def build_CVLDataset(args, transform):
         feat_extractor=None,
         transforms=transform,
         args=args,
+    )
+    return train_data, test_data, style_classes
+
+
+def build_MergedDataset(args, transform):
+    """Merged IAM+CVL+CSAFE memmap split (built by utils/build_multidataset.py).
+
+    ``style_classes`` is the merged writer count W (read off the loaded split), so
+    the style bank / placer / model must be sized to the same W. The split name
+    prefix defaults to ``combined`` (``--merged-setname`` to override)."""
+    setname = getattr(args, "merged_setname", "combined")
+    train_data = MergedWordDataset(
+        "train", fixed_size=(1 * 64, 256), transforms=transform, args=args,
+        setname=setname,
+    )
+    style_classes = train_data.wclasses
+    print("merged writers (style_classes):", style_classes)
+
+    test_size = args.batch_size
+    rest = len(train_data) - test_size
+    test_data, _ = random_split(
+        train_data, [test_size, rest], generator=torch.Generator().manual_seed(42)
     )
     return train_data, test_data, style_classes
 
@@ -386,6 +409,11 @@ def main():
     parser.add_argument("--level", type=str, default="word", help="word, line")
     parser.add_argument("--style-name", default="mobilenetv2_100", type=str)
     parser.add_argument("--gnhk-path", type=str, default="", help="path to GNHK dataset root")
+    parser.add_argument(
+        "--merged-setname", type=str, default="combined",
+        help="split-name prefix for --dataset combined (resolves "
+        "saved_iam_data/<prefix>_word_<subset>)",
+    )
     parser.add_argument("--style-cache", dest="style_cache", action="store_true")
     parser.add_argument("--no-style-cache", dest="style_cache", action="store_false")
     parser.add_argument("--style-cache-path", type=str, default="./saved_style_cache")
@@ -420,6 +448,10 @@ def main():
     elif args.dataset == "cvl":
         print("loading CVL")
         train_data, test_data, style_classes = build_CVLDataset(args, transform)
+
+    elif args.dataset == "combined":
+        print("loading merged (IAM+CVL+CSAFE) memmap split")
+        train_data, test_data, style_classes = build_MergedDataset(args, transform)
 
     else:
         raise ValueError("unknown dataset!")
