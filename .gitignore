@@ -1,6 +1,7 @@
 #
 utils/splits_words/cvl_*.txt
 utils/splits_words/writers_dict_cvl.json
+sample-fmt/
 
 # output images
 outputs
