@@ -440,10 +440,9 @@ def build_style_dataset(args):
     )
 
     full = MergedWordDataset(
-        "train",
+        args.data_dir,
         transforms=train_transform,
         args=args,
-        setname=getattr(args, "merged_setname", "combined"),
         style_mode=True,
     )
     style_classes = full.wclasses
@@ -501,9 +500,10 @@ def main():
         help="type of cnn to use (resnet, densenet, etc.)",
     )
     parser.add_argument(
-        "--merged-setname", type=str, default="combined",
-        help="split-name prefix for the merged dataset (resolves "
-        "saved_iam_data/<prefix>_word_<subset>)",
+        "--data-dir", type=str,
+        default="./saved_iam_data/combined_word_train",
+        help="path to the merged dataset split directory built by "
+        "utils/build_multidataset.py",
     )
     parser.add_argument(
         "--dataset", type=str, default="combined",

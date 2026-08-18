@@ -29,8 +29,6 @@ from torch.utils.data import Dataset
 
 from utils import memmap_dataset as mm
 
-SAVE_ROOT = "./saved_iam_data"
-
 
 def _sample(pool, k):
     """k indices from pool: without replacement when possible, else with
@@ -44,28 +42,28 @@ def _sample(pool, k):
 class MergedWordDataset(Dataset):
     def __init__(
         self,
-        subset,
+        data_dir,
         transforms=None,
         args=None,
-        setname="combined",
         style_mode=False,
     ):
-        self.subset = subset
         self.transforms = transforms
         self.args = args
-        self.setname = setname
         self.style_mode = style_mode
+        # basename of the split dir, used as a stable identity for cache keys
+        # (e.g. train.py::build_style_cache keys on it).
+        self.setname = os.path.basename(os.path.normpath(data_dir))
         # Optional [N, feat] tensor of precomputed frozen style-CNN features,
         # attached externally by train.py::build_style_cache; when set, the
         # diffusion path returns cached style vectors instead of raw crops.
         self.style_cache = None
 
-        mm_dir = os.path.join(SAVE_ROOT, "{}_word_{}".format(setname.lower(), subset))
+        mm_dir = data_dir
         if not mm.split_exists(mm_dir):
             raise RuntimeError(
-                "merged split {} not found -- build it first:\n"
+                "merged split {} not found -- build it first, e.g.:\n"
                 "  python -m utils.build_multidataset --input <folder> "
-                "--split-name {}".format(mm_dir, subset)
+                "--out-name <name> --split-name <split>".format(mm_dir)
             )
         self.images = mm.load_images(mm_dir)  # read-only, fork-safe memmap
         meta = mm.load_meta(mm_dir)

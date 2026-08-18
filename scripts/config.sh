@@ -17,6 +17,9 @@ export DATASET="${DATASET:-iam}"
 export MULTIDATA_INPUT="${MULTIDATA_INPUT:-./sample-fmt}"   # raw folder w/ IAM/ CVL/ CSAFE/
 export MERGED_SETNAME="${MERGED_SETNAME:-combined}"          # -> saved_iam_data/<name>_word_<split>
 export SPLIT_NAME="${SPLIT_NAME:-train}"
+# Split dir the builder writes and the trainers read (--data-dir). Derived from
+# the two above by default; override DATA_DIR directly to point anywhere.
+export DATA_DIR="${DATA_DIR:-./saved_iam_data/${MERGED_SETNAME}_word_${SPLIT_NAME}}"
 
 # ---- paths (match the argparse defaults; edit for your box) ----
 export SAVE_PATH="${SAVE_PATH:-./diffusionpen_iam_model_path}"

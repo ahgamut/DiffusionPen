@@ -68,11 +68,10 @@ def build_MergedDataset(args, transform):
     -- the only training dataset in this codebase.
 
     ``style_classes`` is the merged writer count W (read off the loaded split), so
-    the style bank / placer / model must be sized to the same W. The split name
-    prefix defaults to ``combined`` (``--merged-setname`` to override)."""
-    setname = getattr(args, "merged_setname", "combined")
+    the style bank / placer / model must be sized to the same W. ``--data-dir``
+    points straight at the split directory produced by the builder."""
     train_data = MergedWordDataset(
-        "train", transforms=transform, args=args, setname=setname,
+        args.data_dir, transforms=transform, args=args,
     )
     style_classes = train_data.wclasses
     print("merged writers (style_classes):", style_classes)
@@ -298,9 +297,10 @@ def main():
     parser.add_argument("--level", type=str, default="word", help="word, line")
     parser.add_argument("--style-name", default="mobilenetv2_100", type=str)
     parser.add_argument(
-        "--merged-setname", type=str, default="combined",
-        help="split-name prefix for the merged dataset (resolves "
-        "saved_iam_data/<prefix>_word_<subset>)",
+        "--data-dir", type=str,
+        default="./saved_iam_data/combined_word_train",
+        help="path to the merged dataset split directory built by "
+        "utils/build_multidataset.py",
     )
     parser.add_argument("--style-cache", dest="style_cache", action="store_true")
     parser.add_argument("--no-style-cache", dest="style_cache", action="store_false")

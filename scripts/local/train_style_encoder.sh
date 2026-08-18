@@ -9,7 +9,7 @@ cd "$DP_ROOT"
 $PY style_encoder_train.py \
   --model "${STYLE_MODEL:-mobilenetv2_100}" \
   --dataset "$DATASET" \
-  --merged-setname "$MERGED_SETNAME" \
+  --data-dir "$DATA_DIR" \
   --batch_size "$BATCH_SIZE" \
   --epochs "${STYLE_EPOCHS:-20}" \
   --device "$DEVICE" \
