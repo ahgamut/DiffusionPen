@@ -108,6 +108,10 @@ def train(
     loss_meter = AvgMeter()
     print("Training started....")
 
+    # When latents are precomputed, data[0] is already the VAE latent mean and
+    # the per-step vae.encode is skipped (see build_latent_cache).
+    use_latent_cache = getattr(loader.dataset, "latent_cache", None) is not None
+
     for epoch in range(args.epochs):
         print("Epoch:", epoch)
         pbar = tqdm(loader, desc="\n::")
@@ -136,9 +140,10 @@ def train(
                 style_features = None
 
             if args.latent :
-                images = vae.module.encode(
-                    images.to(torch.float32)
-                ).latent_dist.sample()
+                if not use_latent_cache:
+                    images = vae.module.encode(
+                        images.to(torch.float32)
+                    ).latent_dist.sample()
                 images = images * 0.18215
 
             noise = torch.randn(images.shape).to(images.device)
@@ -288,6 +293,70 @@ def build_style_cache(dataset, extractor, args):
     return feats
 
 
+def build_latent_cache(dataset, vae, args):
+    """Precompute and cache the frozen VAE latent for every image.
+
+    The VAE is frozen and the crops are fixed (transforms are deterministic:
+    ToTensor + Normalize, no augmentation), so vae.encode(img) is the same on
+    every epoch -- yet the training loop re-runs it every step. We compute the
+    latent distribution *mean* once for all images and cache [N, 4, 8, 32] to
+    disk (keyed on the VAE checkpoint + dataset identity so a changed VAE
+    rebuilds); __getitem__ then returns the cached latent as the image and the
+    loop skips vae.encode.
+
+    The mean (not a .sample()) is cached: for a frozen VAE the posterior std is
+    tiny, so dropping the per-step sampling jitter is a negligible, standard
+    trade for removing the encode from the hot loop. The 0.18215 scaling stays
+    in the loop so both the cached and non-cached paths scale identically.
+
+    Scale-safe by construction (same philosophy as the images.npy memmap):
+    latents stream into an ``open_memmap`` .npy row-by-row (only one batch in
+    RAM at build time, no [N,...] concat) as float32, and are read back with
+    ``mmap_mode="r"`` so the OS pages them on demand and forked DataLoader
+    workers share the mapping -- RAM stays O(1) in N, not O(N). The cache lives
+    inside the split dir next to images.npy (keyed on the VAE checkpoint, so a
+    changed VAE rebuilds), and travels with the dataset.
+    """
+    vae_name = os.path.splitext(os.path.basename(args.stable_dif_path.rstrip("/")))[0]
+    cache_file = os.path.join(dataset.data_dir, "latents_{}.npy".format(vae_name))
+    n = len(dataset.data)
+
+    if os.path.isfile(cache_file):
+        feats = np.load(cache_file, mmap_mode="r")
+        if feats.ndim == 4 and feats.shape[0] == n:
+            print("Loaded VAE latent cache:", cache_file, tuple(feats.shape))
+            dataset.latent_cache = feats
+            return feats
+        print("stale VAE latent cache (shape {} vs N={}); rebuilding".format(
+            tuple(feats.shape), n))
+        del feats
+
+    print("Building VAE latent cache ->", cache_file)
+    bs = args.batch_size
+    get_img = getattr(dataset, "_img", lambda i: dataset.data[i][0])
+    arr = None
+    with torch.no_grad():
+        for start in tqdm(range(0, n, bs), desc="latent-cache"):
+            imgs = [
+                dataset.transforms(get_img(i))
+                for i in range(start, min(start + bs, n))
+            ]
+            batch = torch.stack(imgs).to(args.device).to(torch.float32)
+            mean = vae.module.encode(batch).latent_dist.mean.detach().cpu().numpy()
+            if arr is None:
+                # allocate now that the latent shape is known
+                arr = np.lib.format.open_memmap(
+                    cache_file, mode="w+", dtype=np.float32, shape=(n,) + mean.shape[1:]
+                )
+            arr[start:start + mean.shape[0]] = mean.astype(np.float32)
+    arr.flush()
+    del arr
+    feats = np.load(cache_file, mmap_mode="r")
+    print("Saved VAE latent cache:", cache_file, tuple(feats.shape))
+    dataset.latent_cache = feats
+    return feats
+
+
 def main():
     """Main function"""
     parser = argparse.ArgumentParser("diffusionpen-train")
@@ -305,7 +374,9 @@ def main():
     parser.add_argument("--style-cache", dest="style_cache", action="store_true")
     parser.add_argument("--no-style-cache", dest="style_cache", action="store_false")
     parser.add_argument("--style-cache-path", type=str, default="./saved_style_cache")
-    parser.set_defaults(style_cache=True)
+    parser.add_argument("--latent-cache", dest="latent_cache", action="store_true")
+    parser.add_argument("--no-latent-cache", dest="latent_cache", action="store_false")
+    parser.set_defaults(style_cache=True, latent_cache=True)
     add_common_args(parser)
     args = parser.parse_args()
 
@@ -447,6 +518,10 @@ def main():
     # Precompute frozen style features so the per-step 5-crop CNN pass is skipped.
     if args.style_cache:
         build_style_cache(train_data, feature_extractor, args)
+
+    # Precompute frozen VAE latents so the per-step vae.encode is skipped.
+    if args.latent and args.latent_cache:
+        build_latent_cache(train_data, vae, args)
 
     train(
         diffusion,

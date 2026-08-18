@@ -50,6 +50,8 @@ class MergedWordDataset(Dataset):
         self.transforms = transforms
         self.args = args
         self.style_mode = style_mode
+        # the split directory itself; caches co-located with images.npy live here.
+        self.data_dir = data_dir
         # basename of the split dir, used as a stable identity for cache keys
         # (e.g. train.py::build_style_cache keys on it).
         self.setname = os.path.basename(os.path.normpath(data_dir))
@@ -57,6 +59,12 @@ class MergedWordDataset(Dataset):
         # attached externally by train.py::build_style_cache; when set, the
         # diffusion path returns cached style vectors instead of raw crops.
         self.style_cache = None
+        # Optional [N, 4, 8, 32] read-only float32 memmap of precomputed frozen
+        # VAE latent means (unscaled), attached by train.py::build_latent_cache;
+        # when set, the diffusion path returns the cached latent as the image, so
+        # the training loop skips the per-step vae.encode. Memmapped so RAM stays
+        # O(1) in N and forked workers share it.
+        self.latent_cache = None
 
         mm_dir = data_dir
         if not mm.split_exists(mm_dir):
@@ -113,10 +121,16 @@ class MergedWordDataset(Dataset):
         return self._getitem_diffusion(index)
 
     def _getitem_diffusion(self, index):
-        img = self._img(index)
         img_path = self.data[index][3]
-        if self.transforms is not None:
-            img = self.transforms(img)
+        if self.latent_cache is not None:
+            # precomputed VAE latent mean -> the loop skips vae.encode entirely.
+            # np.array() copies the row out of the read-only memmap (writable,
+            # no aliasing) before handing it to torch.
+            img = torch.from_numpy(np.array(self.latent_cache[index])).float()
+        else:
+            img = self._img(index)
+            if self.transforms is not None:
+                img = self.transforms(img)
         transcr = self.data[index][1]
         wid = self.data[index][2]
 
