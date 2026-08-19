@@ -332,7 +332,7 @@ def train_mixed(
             )
             print("Saved Best Model!")
 
-        scheduler.step(val_loss)
+        scheduler.step()
 
 
 def train_classification(
@@ -422,7 +422,7 @@ def train_triplet(
             )
             print("Saved Best Model!")
 
-        scheduler.step(val_loss)
+        scheduler.step()
 
 
 ### BUILDING DATASETS
