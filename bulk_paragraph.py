@@ -1,18 +1,11 @@
-import os
 import sys
 import traceback
-import torch
 import argparse
 
 #
-from utils.generation import (
-    setup_logging,
-    build_fake_image_N,
-    add_rescale_padding,
-    build_paragraph_image,
-)
+from utils.generation import render_paragraph
 from utils.arghandle import add_common_args, file_check, range_check
-from utils.model_setup import load_models
+from utils.gen_cli import init_generation, read_words
 
 
 def main():
@@ -26,47 +19,17 @@ def main():
     parser.add_argument("-o", "--output", type=str, default="./output.png")
     add_common_args(parser)
 
-    args = parser.parse_args()
-    print(__file__, "with torch", torch.__version__)
+    args, m = init_generation(parser, __file__)
 
-    # create save directories
-    setup_logging(args)
-    torch.cuda.empty_cache()
-
-    m = load_models(args)
-
-    # make the code to generate lines
-    lines = open(args.text_file).read()
-    words = lines.strip().split(" ")
+    words = read_words(args.text_file)
     max_line_width = args.max_line_width
-    max_word_length_width = 0
-    longest_word_length = max(len(word) for word in words)
 
     output_template = args.output.replace(".png", "-{s}.png")
     writer_range = args.writer_range
     for s in range(writer_range[0], writer_range[1] + 1):
         try:
-            # build fake images
-            fakes, max_word_length_width = build_fake_image_N(
-                words,
-                s=s,
-                args=args,
-                models=m,
-                longest_word_length=longest_word_length,
-                max_word_length_width=max_word_length_width,
-            )
-
-            # Scale and pad each word
-            scaled_padded_words = add_rescale_padding(
-                words,
-                fakes,
-                max_word_length_width=max_word_length_width,
-                longest_word_length=longest_word_length,
-            )
-
-            # combine to create paragraph
-            paragraph_image = build_paragraph_image(
-                scaled_padded_words, max_line_width=max_line_width
+            paragraph_image = render_paragraph(
+                words, args, m, max_line_width=max_line_width, s=s
             )
             paragraph_image.save(output_template.format(s=s))
         except Exception as e:

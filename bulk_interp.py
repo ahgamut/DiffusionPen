@@ -1,16 +1,14 @@
 import os
-import torch
 import numpy as np
 import argparse
 
 #
 from utils.generation import (
-    setup_logging,
     build_fake_interp_1,
     stack_images,
 )
 from utils.arghandle import add_common_args
-from utils.model_setup import load_models
+from utils.gen_cli import init_generation
 
 
 def main():
@@ -24,14 +22,7 @@ def main():
     add_common_args(parser)
     parser.set_defaults(interpolation=False)
 
-    args = parser.parse_args()
-    print(__file__, "with torch", torch.__version__)
-
-    # create save directories
-    setup_logging(args)
-    torch.cuda.empty_cache()
-
-    m = load_models(args)
+    args, m = init_generation(parser, __file__)
 
     w = 0.1
     weights = np.arange(0, 1 + w, w)

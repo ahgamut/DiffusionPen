@@ -1,16 +1,10 @@
 import os
-import torch
 import argparse
 
 #
-from utils.generation import (
-    setup_logging,
-    build_fake_image_N,
-    add_rescale_padding,
-    build_paragraph_image,
-)
+from utils.generation import build_fake_image_N
 from utils.arghandle import add_common_args, file_check
-from utils.model_setup import load_models
+from utils.gen_cli import init_generation, read_words
 
 
 def main():
@@ -23,18 +17,9 @@ def main():
     )
     add_common_args(parser)
 
-    args = parser.parse_args()
-    print(__file__, "with torch", torch.__version__)
+    args, m = init_generation(parser, __file__)
 
-    # create save directories
-    setup_logging(args)
-    torch.cuda.empty_cache()
-
-    m = load_models(args)
-
-    # make the code to generate lines
-    lines = open(args.text_file).read()
-    words = lines.strip().split(" ")
+    words = read_words(args.text_file)
     max_line_width = args.max_line_width
     max_word_length_width = 0
     longest_word_length = max(len(word) for word in words)

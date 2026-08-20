@@ -3,19 +3,12 @@ import traceback
 import random
 import os
 import numpy as np
-import torch
 import argparse
 
 #
-from utils.generation import (
-    setup_logging,
-    build_fake_image_N,
-    build_fake_interp_N,
-    add_rescale_padding,
-    build_paragraph_image,
-)
+from utils.generation import render_paragraph
 from utils.arghandle import add_common_args, file_check
-from utils.model_setup import load_models
+from utils.gen_cli import init_generation, read_words
 
 
 def main():
@@ -28,19 +21,10 @@ def main():
     )
     add_common_args(parser)
 
-    args = parser.parse_args()
-    print(__file__, "with torch", torch.__version__)
+    args, m = init_generation(parser, __file__)
 
-    # create save directories
-    setup_logging(args)
-    torch.cuda.empty_cache()
-
-    m = load_models(args)
-
-    lines = open(args.text_file).read()
-    words = lines.strip().split(" ")
+    words = read_words(args.text_file)
     max_line_width = args.max_line_width
-    longest_word_length = max(len(word) for word in words)
     w = 0.1
     weights = np.arange(0, 1 + w, w)
 
@@ -55,66 +39,22 @@ def main():
 
         try:
             # generate with s1
-            max_word_length_width = 0
-            fakes, max_word_length_width = build_fake_image_N(
-                words,
-                s=s1,
-                args=args,
-                models=m,
-                longest_word_length=longest_word_length,
-                max_word_length_width=max_word_length_width,
-            )
-            scaled_padded_words = add_rescale_padding(
-                words,
-                fakes,
-                max_word_length_width=max_word_length_width,
-                longest_word_length=longest_word_length,
-            )
-            gen_1 = build_paragraph_image(
-                scaled_padded_words, max_line_width=max_line_width
+            gen_1 = render_paragraph(
+                words, args, m, max_line_width=max_line_width, s=s1
             )
             gen_1.save(os.path.join(args.output, f"intgen_{s1}_{rid}_1.png"))
 
             # generate with s2
-            max_word_length_width = 0
-            fakes, max_word_length_width = build_fake_image_N(
-                words,
-                s=s2,
-                args=args,
-                models=m,
-                longest_word_length=longest_word_length,
-                max_word_length_width=max_word_length_width,
-            )
-            scaled_padded_words = add_rescale_padding(
-                words,
-                fakes,
-                max_word_length_width=max_word_length_width,
-                longest_word_length=longest_word_length,
-            )
-            gen_2 = build_paragraph_image(
-                scaled_padded_words, max_line_width=max_line_width
+            gen_2 = render_paragraph(
+                words, args, m, max_line_width=max_line_width, s=s2
             )
             gen_2.save(os.path.join(args.output, f"intgen_{s2}_{rid}_1.png"))
 
             for weight in weights:
                 # generate with interpolated style
                 args.mix_rate = weight
-                max_word_length_width = 0
-                fakes, max_word_length_width = build_fake_interp_N(
-                    words,
-                    args=args,
-                    models=m,
-                    longest_word_length=longest_word_length,
-                    max_word_length_width=max_word_length_width,
-                )
-                scaled_padded_words = add_rescale_padding(
-                    words,
-                    fakes,
-                    max_word_length_width=max_word_length_width,
-                    longest_word_length=longest_word_length,
-                )
-                gen_int = build_paragraph_image(
-                    scaled_padded_words, max_line_width=max_line_width
+                gen_int = render_paragraph(
+                    words, args, m, max_line_width=max_line_width, interp=True
                 )
                 gen_int.save(
                     os.path.join(

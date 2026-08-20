@@ -3,21 +3,19 @@ import sys
 import traceback
 import random
 import os
-import torch
 import argparse
 from PIL import Image
 
 #
 from utils.iam_temploader import IAM_TempLoader
 from utils.generation import (
-    setup_logging,
     build_fake_image_N,
     add_rescale_padding,
     build_paragraph_image,
 )
-from utils.arghandle import add_common_args, file_check
+from utils.arghandle import add_common_args
 from utils.subprompt import Prompt as XMLPrompt
-from utils.model_setup import load_models
+from utils.gen_cli import init_generation, read_words
 
 
 def build_ref_paragraph(fakes, xpr, max_line_width, longest_word_length):
@@ -62,19 +60,11 @@ def main():
     parser.add_argument("--alt-text", default="./prompts/sample.txt", help="alt text")
     add_common_args(parser)
 
-    args = parser.parse_args()
-    print(__file__, "with torch", torch.__version__)
-
-    # create save directories
-    setup_logging(args)
+    args, m = init_generation(parser, __file__)
     IAM_TempLoader.check_preload()
-    torch.cuda.empty_cache()
-
-    m = load_models(args)
 
     coll_xmls = list(glob.glob("./iam_data/xml/*.xml"))
-    alt_lines = open(args.alt_text).read()
-    alt_words = alt_lines.strip().split(" ")
+    alt_words = read_words(args.alt_text)
 
     def distort(x):
         if "the" in x:
