@@ -1,8 +1,5 @@
-import os
 import json
-import random
-from PIL import Image, ImageOps
-from torchvision import transforms
+from PIL import ImageOps
 
 #
 from utils.auxiliary_functions import (
@@ -43,7 +40,6 @@ class IAM_TempLoader:
     train_data = None
     root_path = "./iam_data/words"
     wmap = None
-    tform = None
 
     @classmethod
     def check_preload(cls):
@@ -70,9 +66,6 @@ class IAM_TempLoader:
                     wmap[wid] = [(img_path, wid, transcr)]
             cls.wmap = wmap
 
-        if cls.tform is None:
-            cls.tform = transforms.ToTensor()
-
     @classmethod
     def map_index_to_wid(cls, label_index):
         return cls.reverse_wr_dict[label_index]
@@ -80,30 +73,3 @@ class IAM_TempLoader:
     @classmethod
     def map_wid_to_index(cls, wid):
         return cls.wr_dict[wid]
-
-    @classmethod
-    def get_refs(cls, label_index, n_samples):
-        wid = cls.map_index_to_wid(label_index)
-        matching_lines = cls.wmap[wid]
-
-        paths = []
-        imgs = []
-        while len(imgs) < 5:
-            mas = random.sample(matching_lines, n_samples)
-            for ma in mas:
-                ma_path = None
-                ma_img = None
-                if len(ma[2]) > 3:
-                    ma_path = os.path.join(cls.root_path, ma[0])
-                if ma_path is not None:
-                    try:
-                        ma_img = Image.open(ma_path).convert("RGB")
-                    except Exception:
-                        # Handle the exception (e.g., print an error message)
-                        print(f"Error loading image from {ma_path}")
-                if ma_img is not None:
-                    imgs.append(ma_img)
-                    paths.append(ma[0])
-
-        result = {"paths": paths[:5], "imgs": imgs[:5]}
-        return result

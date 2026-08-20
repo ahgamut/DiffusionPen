@@ -29,9 +29,6 @@ class Diffusion:
     def prepare_noise_schedule(self):
         return torch.linspace(self.beta_start, self.beta_end, self.noise_steps)
 
-    def sample_timesteps(self, n):
-        return torch.randint(low=1, high=self.noise_steps, size=(n,))
-
     def get_style_coll(self, label_index, args):
         # Bank lookup: tile the writer's mean vector to [5, 1280] so the UNet's
         # reshape(b,5,1280)->mean returns exactly that mean. The precomputed

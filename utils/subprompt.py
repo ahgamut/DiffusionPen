@@ -36,14 +36,6 @@ class Word:
     wid: str
 
     @property
-    def nwidth(self):
-        return (self.x_end - self.x_start) / self.pl_width
-
-    @property
-    def nheight(self):
-        return (self.y_end - self.y_start) / self.pl_height
-
-    @property
     def width(self):
         return self.x_end - self.x_start
 
@@ -58,10 +50,6 @@ class Word:
     @property
     def parent_line(self):
         return self.idd.split("-")[2]
-
-    @property
-    def inline_index(self):
-        return int(self.idd.split("-")[3])
 
     @property
     def writer_id(self):
