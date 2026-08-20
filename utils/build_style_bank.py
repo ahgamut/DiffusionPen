@@ -22,7 +22,7 @@ import torchvision
 from torchvision import transforms
 
 from models import ImageEncoder
-from models.diffpen2 import IAM_TempLoader, iam_resizefix
+from utils.iam_temploader import IAM_TempLoader, iam_resizefix
 from utils.arghandle import add_common_args
 
 NUM_WRITERS = 339

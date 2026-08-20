@@ -8,7 +8,7 @@ import argparse
 from PIL import Image
 
 #
-from models.diffpen2 import IAM_TempLoader
+from utils.iam_temploader import IAM_TempLoader
 from utils.generation import (
     setup_logging,
     build_fake_image_N,

@@ -1,109 +1,4 @@
-import os
 import torch
-from PIL import Image, ImageOps
-import json
-import random
-from torchvision import transforms
-
-#
-from utils.auxiliary_functions import (
-    image_resize_PIL,
-    centered_PIL,
-)
-
-
-def iam_resizefix(img_s):
-    (img_width, img_height) = img_s.size
-    img_s = img_s.resize((int(img_width * 64 / img_height), 64))
-    (img_width, img_height) = img_s.size
-
-    if img_width < 256:
-        outImg = ImageOps.pad(
-            img_s, size=(256, 64), color="white"
-        )  # , centering=(0,0)) uncommment to pad right
-        img_s = outImg
-
-    else:
-        # reduce image until width is smaller than 256
-        while img_width > 256:
-            img_s = image_resize_PIL(img_s, width=img_width - 20)
-            (img_width, img_height) = img_s.size
-        img_s = centered_PIL(img_s, (64, 256), border_value=255.0)
-
-    return img_s
-
-
-class IAM_TempLoader:
-
-    wr_dict = None
-    reverse_wr_dict = None
-    train_data = None
-    root_path = "./iam_data/words"
-    wmap = None
-    tform = None
-
-    @classmethod
-    def check_preload(cls):
-        if cls.wr_dict is None:
-            with open("utils/writers_dict_train_iam.json", "r") as f:
-                cls.wr_dict = json.load(f)
-                cls.reverse_wr_dict = {v: k for k, v in cls.wr_dict.items()}
-
-        if cls.train_data is None:
-            with open("./utils/splits_words/iam_train_val.txt", "r") as f:
-                # with open('./utils/splits_words/iam_test.txt', 'r') as f:
-                train_data = f.readlines()
-                cls.train_data = [i.strip().split(",") for i in train_data]
-
-        if cls.wmap is None:
-            wmap = dict()
-            for obj in cls.train_data:
-                img_path = obj[0]
-                wid = obj[1]
-                transcr = ",".join(obj[2:])
-                if wid in wmap.keys():
-                    wmap[wid].append((img_path, wid, transcr))
-                else:
-                    wmap[wid] = [(img_path, wid, transcr)]
-            cls.wmap = wmap
-
-        if cls.tform is None:
-            cls.tform = transforms.ToTensor()
-
-    @classmethod
-    def map_index_to_wid(cls, label_index):
-        return cls.reverse_wr_dict[label_index]
-
-    @classmethod
-    def map_wid_to_index(cls, wid):
-        return cls.wr_dict[wid]
-
-    @classmethod
-    def get_refs(cls, label_index, n_samples):
-        wid = cls.map_index_to_wid(label_index)
-        matching_lines = cls.wmap[wid]
-
-        paths = []
-        imgs = []
-        while len(imgs) < 5:
-            mas = random.sample(matching_lines, n_samples)
-            for ma in mas:
-                ma_path = None
-                ma_img = None
-                if len(ma[2]) > 3:
-                    ma_path = os.path.join(cls.root_path, ma[0])
-                if ma_path is not None:
-                    try:
-                        ma_img = Image.open(ma_path).convert("RGB")
-                    except Exception:
-                        # Handle the exception (e.g., print an error message)
-                        print(f"Error loading image from {ma_path}")
-                if ma_img is not None:
-                    imgs.append(ma_img)
-                    paths.append(ma[0])
-
-        result = {"paths": paths[:5], "imgs": imgs[:5]}
-        return result
 
 
 class Diffusion:
@@ -137,77 +32,18 @@ class Diffusion:
     def sample_timesteps(self, n):
         return torch.randint(low=1, high=self.noise_steps, size=(n,))
 
-    def get_style(
-        self,
-        label_index,
-        transform,
-        args,
-        temp_loader,
-        interpol=False,
-        cor_im=False,
-    ):
-        #
-        fheight, fwidth = 64, 256
-        device = args.device
-        #
-        five_refs = temp_loader.get_refs(label_index, 5)
-        # print("five_styles", five_refs["paths"])
-
-        cor_image_random = temp_loader.get_refs(label_index, 1)
-        if cor_im:
-            cor_image = cor_image_random["imgs"][0]
-            cor_image = iam_resizefix(cor_image)
-            cor_im_tens = transform(cor_image).to(device)
-            cor_im_tens = cor_im_tens.unsqueeze(0)
-            cor_images = vae.module.encode(
-                cor_im_tens.to(torch.float32)
-            ).latent_dist.sample()
-            cor_images = cor_images * 0.18215
-
-        st_imgs = []
-        for im_idx, img_s in enumerate(five_refs["imgs"]):
-            img_s = iam_resizefix(img_s)
-            img_tens = transform(img_s).to(device)  # .unsqueeze(0)
-            st_imgs += [img_tens]
-
-        # save style images
-        style_images = torch.stack(st_imgs).to(device)
-        style_images = style_images.reshape(-1, 3, 64, 256)
-        return style_images
-
-    def get_style_coll(
-        self,
-        label_index,
-        transform,
-        args,
-        temp_loader,
-        style_extractor,
-        cor_im=False,
-        interpol=False,
-    ):
-        style_coll = dict()
-        if self.style_bank is not None:
-            # Bank lookup: tile the writer's mean vector to [5, 1280] so the
-            # UNet's reshape(b,5,1280)->mean returns exactly that mean (no crop
-            # read, no CNN, no random.sample jitter). Matches the CNN path shape.
-            vec = self.style_bank[label_index].to(args.device)
-            s_feat = vec.unsqueeze(0).expand(5, -1).contiguous()
-            style_coll["images"] = None
-            style_coll["features"] = s_feat
-            return style_coll
-
-        s_imgs = self.get_style(
-            label_index,
-            transform,
-            args,
-            temp_loader,
-            cor_im=cor_im,
-            interpol=interpol,
-        )
-        s_feat = style_extractor(s_imgs).to(args.device)
-        style_coll["images"] = s_imgs
-        style_coll["features"] = s_feat
-        return style_coll
+    def get_style_coll(self, label_index, args):
+        # Bank lookup: tile the writer's mean vector to [5, 1280] so the UNet's
+        # reshape(b,5,1280)->mean returns exactly that mean. The precomputed
+        # style bank is the only style source at inference (the raw-IAM CNN path
+        # was removed); callers must load one via --style-bank / --style-bank-path.
+        if self.style_bank is None:
+            raise RuntimeError(
+                "inference requires a style bank; pass --style-bank / --style-bank-path"
+            )
+        vec = self.style_bank[label_index].to(args.device)
+        s_feat = vec.unsqueeze(0).expand(5, -1).contiguous()
+        return {"images": None, "features": s_feat}
 
     def get_text_embed(self, x_text, tokenizer, max_length=40):
         n = 0
@@ -299,13 +135,6 @@ class Diffusion:
         run_idx=None,
     ):
         model.eval()
-        temp_loader = None
-
-        # Only the raw-IAM style path needs IAM_TempLoader; the style_bank path
-        # (merged pipeline) does not, and the merged box has no iam_data/.
-        if self.style_bank is None and args.dataset == "iam":
-            temp_loader = IAM_TempLoader
-            temp_loader.check_preload()
 
         with torch.no_grad():
             text_features = [x_text] * n
@@ -322,9 +151,7 @@ class Diffusion:
             if args.img_feat:
                 for label in labels:
                     style_colls.append(
-                        self.get_style_coll(
-                            label.item(), transform, args, temp_loader, style_extractor
-                        )
+                        self.get_style_coll(label.item(), args)
                     )
                 style_images = style_colls[0]["images"]
                 # [n*5, feat] so the UNet reshape(b,5,-1) uses each image's writer
@@ -371,13 +198,9 @@ class Diffusion:
         model.eval()
         assert len(labels) == 2
         n = 1
-        temp_loader = None
 
         if mix_rate is None:
             mix_rate = args.mix_rate
-        if args.dataset == "iam":
-            temp_loader = IAM_TempLoader
-        temp_loader.check_preload()
         print("mix_rate", mix_rate)
 
         with torch.no_grad():
@@ -395,9 +218,7 @@ class Diffusion:
             if args.img_feat:
                 for label in labels:
                     style_colls.append(
-                        self.get_style_coll(
-                            label.item(), transform, args, temp_loader, style_extractor
-                        )
+                        self.get_style_coll(label.item(), args)
                     )
 
                 style_images = style_colls[0]["images"]
@@ -438,13 +259,8 @@ class Diffusion:
         run_idx=None,
     ):
         model.eval()
-        temp_loader = None
         assert args.img_feat
         assert len(labels) == 1
-
-        if args.dataset == "iam":
-            temp_loader = IAM_TempLoader
-        temp_loader.check_preload()
 
         with torch.no_grad():
             n, text_features = self.get_text_embed(x_text, tokenizer)
@@ -452,11 +268,7 @@ class Diffusion:
 
             style_colls = []
             for i in range(n):
-                style_colls.append(
-                    self.get_style_coll(
-                        labels[0].item(), transform, args, temp_loader, style_extractor
-                    )
-                )
+                style_colls.append(self.get_style_coll(labels[0].item(), args))
             style_features = torch.stack([x["features"] for x in style_colls])
 
             #
@@ -493,16 +305,12 @@ class Diffusion:
         run_idx=None,
     ):
         model.eval()
-        temp_loader = None
         assert args.img_feat
         assert len(labels) == 2
         n = 1
 
         if mix_rate is None:
             mix_rate = args.mix_rate
-        if args.dataset == "iam":
-            temp_loader = IAM_TempLoader
-        temp_loader.check_preload()
 
         with torch.no_grad():
             n, text_features = self.get_text_embed(x_text, tokenizer)
@@ -511,16 +319,8 @@ class Diffusion:
             sc0 = []
             sc1 = []
             for i in range(n):
-                sc0.append(
-                    self.get_style_coll(
-                        labels[0].item(), transform, args, temp_loader, style_extractor
-                    )
-                )
-                sc1.append(
-                    self.get_style_coll(
-                        labels[1].item(), transform, args, temp_loader, style_extractor
-                    )
-                )
+                sc0.append(self.get_style_coll(labels[0].item(), args))
+                sc1.append(self.get_style_coll(labels[1].item(), args))
             sf0 = torch.stack([x["features"] for x in sc0])
             sf1 = torch.stack([x["features"] for x in sc1])
             style_features = sf0 * mix_rate + sf1 * (1 - mix_rate)
