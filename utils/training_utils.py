@@ -1,15 +1,4 @@
-import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
-
-
-def custom_loss(out=1.0, alpha=0.5, beta=2.0):
-    def fn(pred, target):
-        l2 = nn.functional.mse_loss(pred, target, reduction="none")
-        small = alpha * l2[l2 <= out].sum()
-        big = beta * l2[l2 > out].sum()
-        return big + small
-
-    return fn
 
 
 def get_loaders(dset, batch_size):

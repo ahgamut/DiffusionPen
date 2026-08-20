@@ -128,11 +128,6 @@ def load_index(dirpath):
         return msgpack.unpackb(f.read(), raw=False)
 
 
-def load_manifest(dirpath):
-    with open(os.path.join(dirpath, MANIFEST_FILE), "r") as f:
-        return json.load(f)
-
-
 class WimgsView:
     """Sequence adapter exposing ``wimgs[i] -> RGB bytes`` over a memmap image
     array, so byte-consumers (`Image.frombytes`, upsampler) stay drop-in."""

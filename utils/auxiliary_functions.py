@@ -1,6 +1,5 @@
 import numpy as np
 from PIL import Image
-from skimage.transform import resize
 import cv2
 
 
@@ -18,19 +17,6 @@ def affine_transformation(img, m=1.0, s=0.2, border_value=None):
         img, transform, dsize=(w, h), borderValue=float(border_value)
     )
     return warped_img
-
-
-def image_resize(img, height=None, width=None):
-    if height is not None and width is None:
-        scale = float(height) / float(img.shape[0])
-        width = int(scale * img.shape[1])
-
-    if width is not None and height is None:
-        scale = float(width) / float(img.shape[1])
-        height = int(scale * img.shape[0])
-
-    img = resize(image=img, output_shape=(height, width)).astype(np.float32)
-    return img
 
 
 def image_resize_PIL(img, height=None, width=None, resample=Image.LANCZOS):

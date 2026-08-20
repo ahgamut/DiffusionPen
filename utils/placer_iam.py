@@ -68,10 +68,6 @@ def load_placer_store(savefolder="./saved_iam_data"):
     return PlacerStore(words, raw["wimgs"], None, pairs)
 
 
-def line_of_word(word):
-    return word.idd.split("-")[2]
-
-
 def iam_resizefix(img_s):
     (img_width, img_height) = img_s.size
     img_s = img_s.resize((int(img_width * 64 / img_height), 64))
@@ -102,15 +98,6 @@ def get_wimg_crop(word, img, resize=True, encode=True):
     if encode:
         rszd = rszd.tobytes()
     return rszd
-
-
-def read_iam_image(img_id):
-    splits = img_id.split("-")
-    p0 = splits[0]
-    p1 = "-".join(splits[:2])
-    path = os.path.join("./iam_data", "words", p0, p1, f"{img_id}.png")
-    img = Image.open(path).convert("RGB")
-    return img
 
 
 def get_spacing_info(prompt, img, ind_start):
