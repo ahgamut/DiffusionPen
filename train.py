@@ -364,7 +364,6 @@ def main():
     parser.add_argument("--batch-size", type=int, default=320)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--level", type=str, default="word", help="word, line")
-    parser.add_argument("--style-name", default="mobilenetv2_100", type=str)
     parser.add_argument(
         "--data-dir", type=str,
         default="./saved_iam_data/combined_word_train",
