@@ -308,7 +308,7 @@ class Diffusion:
             temp_loader.check_preload()
 
         with torch.no_grad():
-            text_features = x_text
+            text_features = [x_text] * n
             text_features = tokenizer(
                 text_features,
                 padding="max_length",
