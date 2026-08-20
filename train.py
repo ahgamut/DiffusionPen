@@ -188,33 +188,34 @@ def train(
         print("train MSE:", repr(loss_meter))
 
         if epoch % 10 == 0:
-            labels = torch.arange(16).long().to(args.device)
-            n = len(labels)
+            if args.sample_preview:
+                labels = torch.arange(16).long().to(args.device)
+                n = len(labels)
 
-            words = ["text", "sample", "images"]
-            for x_text in words:
-                ema_sampled_images = diffusion.sampling(
-                    ema_model,
-                    vae,
-                    n=n,
-                    x_text=x_text,
-                    labels=labels,
-                    args=args,
-                    style_extractor=style_extractor,
-                    noise_scheduler=noise_scheduler,
-                    transform=transforms,
-                    tokenizer=tokenizer,
-                    text_encoder=text_encoder,
-                )
+                words = ["text", "sample", "images"]
+                for x_text in words:
+                    ema_sampled_images = diffusion.sampling(
+                        ema_model,
+                        vae,
+                        n=n,
+                        x_text=x_text,
+                        labels=labels,
+                        args=args,
+                        style_extractor=style_extractor,
+                        noise_scheduler=noise_scheduler,
+                        transform=transforms,
+                        tokenizer=tokenizer,
+                        text_encoder=text_encoder,
+                    )
 
-                epoch_n = epoch
-                sampled_ema = save_image_grid(
-                    ema_sampled_images,
-                    os.path.join(
-                        args.save_path, "images", f"{epoch_n:04d}_{x_text}_ema.jpg"
-                    ),
-                    args,
-                )
+                    epoch_n = epoch
+                    sampled_ema = save_image_grid(
+                        ema_sampled_images,
+                        os.path.join(
+                            args.save_path, "images", f"{epoch_n:04d}_{x_text}_ema.jpg"
+                        ),
+                        args,
+                    )
 
             torch.save(
                 model.state_dict(), os.path.join(args.save_path, "models", "ckpt.pt")
@@ -375,7 +376,11 @@ def main():
     parser.add_argument("--style-cache-path", type=str, default="./saved_style_cache")
     parser.add_argument("--latent-cache", dest="latent_cache", action="store_true")
     parser.add_argument("--no-latent-cache", dest="latent_cache", action="store_false")
-    parser.set_defaults(style_cache=True, latent_cache=True)
+    parser.add_argument("--sample-preview", dest="sample_preview", action="store_true")
+    parser.add_argument(
+        "--no-sample-preview", dest="sample_preview", action="store_false"
+    )
+    parser.set_defaults(style_cache=True, latent_cache=True, sample_preview=False)
     add_common_args(parser)
     args = parser.parse_args()
 
