@@ -1,5 +1,5 @@
 #
-from .diffpen import EMA, AvgMeter
+from .training import EMA, AvgMeter
 from .diffpen2 import Diffusion
 from .unet import UNetModel
 from .feature_extractor import ImageEncoder, Mixed_Encoder
