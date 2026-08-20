@@ -10,6 +10,13 @@ from inspect import isfunction
 import math
 
 
+# style encoder backbone -> output feature width (num_classes=0 ImageEncoder)
+STYLE_FEAT_DIMS = {
+    "mobilenetv2_100": 1280,
+    "resnet18": 512,
+}
+
+
 def checkpoint(func, inputs, params, flag):
     """
     Evaluate a function without caching intermediate activations, allowing for
@@ -1330,7 +1337,9 @@ class UNetModel(nn.Module):
         self.interpolation = args.interpolation
         self.mix_rate = args.mix_rate
         # self.style_lin = nn.Linear(1280*5, time_embed_dim)
-        self.style_lin = nn.Linear(1280, time_embed_dim)
+        style_name = getattr(args, "style_name", "mobilenetv2_100")
+        style_feat_dim = STYLE_FEAT_DIMS.get(style_name, 1280)
+        self.style_lin = nn.Linear(style_feat_dim, time_embed_dim)
         self.target_token_idx = 0
         self.text_lin = nn.Linear(768, 320)
 
