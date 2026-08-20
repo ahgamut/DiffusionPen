@@ -91,7 +91,10 @@ def load_models(args):
     ddim = DDIMScheduler.from_pretrained(args.stable_dif_path, subfolder="scheduler")
 
     feature_extractor = ImageEncoder(
-        model_name="mobilenetv2_100", num_classes=0, pretrained=True, trainable=True
+        model_name=getattr(args, "style_name", "mobilenetv2_100"),
+        num_classes=0,
+        pretrained=True,
+        trainable=True,
     )
     style_state_dict = torch.load(
         args.style_path, map_location=args.device, weights_only=True

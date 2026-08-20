@@ -56,6 +56,7 @@ def add_common_args(parser):
     parser.add_argument(
         "--style-path", type=str, default="./style_models/iam_style_diffusionpen.pth"
     )
+    parser.add_argument("--style-name", type=str, default="mobilenetv2_100")
     parser.add_argument(
         "--stable-dif-path", type=str, default="./stable-diffusion-v1-5"
     )
