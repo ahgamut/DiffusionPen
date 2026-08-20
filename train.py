@@ -358,6 +358,36 @@ def build_latent_cache(dataset, vae, args):
     return feats
 
 
+def build_preview_style_bank(dataset, extractor, num_writers, args):
+    """Per-writer mean style vector [num_writers, feat] from the merged dataset,
+    set as diffusion.style_bank so the preview conditions on merged writers."""
+    by_writer = dataset.writer_to_indices
+    feats_by_writer = {}
+    if dataset.style_cache is not None:
+        cache = dataset.style_cache
+        feat_dim = cache.size(-1)
+        for wid, idxs in by_writer.items():
+            feats_by_writer[wid] = cache[idxs].mean(dim=0)
+    else:
+        extractor.eval()
+        feat_dim = None
+        with torch.no_grad():
+            for wid, idxs in tqdm(by_writer.items(), desc="preview-bank"):
+                batch = torch.stack(
+                    [dataset.transforms(dataset._img(i)) for i in idxs[:5]]
+                ).to(args.device)
+                vec = extractor(batch).mean(dim=0).detach().cpu()
+                feats_by_writer[wid] = vec
+                feat_dim = vec.numel()
+
+    bank = torch.zeros(num_writers, feat_dim)
+    for wid, vec in feats_by_writer.items():
+        if 0 <= wid < num_writers:
+            bank[wid] = vec.to(bank.dtype)
+    print("built preview style bank:", tuple(bank.shape))
+    return bank
+
+
 def main():
     """Main function"""
     parser = argparse.ArgumentParser("diffusionpen-train")
@@ -380,7 +410,7 @@ def main():
     parser.add_argument(
         "--no-sample-preview", dest="sample_preview", action="store_false"
     )
-    parser.set_defaults(style_cache=True, latent_cache=True, sample_preview=False)
+    parser.set_defaults(style_cache=True, latent_cache=True, sample_preview=True)
     add_common_args(parser)
     args = parser.parse_args()
 
@@ -526,6 +556,11 @@ def main():
     # Precompute frozen VAE latents so the per-step vae.encode is skipped.
     if args.latent and args.latent_cache:
         build_latent_cache(train_data, vae, args)
+
+    if args.sample_preview:
+        diffusion.style_bank = build_preview_style_bank(
+            train_data, feature_extractor, style_classes, args
+        )
 
     train(
         diffusion,

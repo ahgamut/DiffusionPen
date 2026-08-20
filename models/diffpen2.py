@@ -301,9 +301,11 @@ class Diffusion:
         model.eval()
         temp_loader = None
 
-        if args.dataset == "iam":
+        # Only the raw-IAM style path needs IAM_TempLoader; the style_bank path
+        # (merged pipeline) does not, and the merged box has no iam_data/.
+        if self.style_bank is None and args.dataset == "iam":
             temp_loader = IAM_TempLoader
-        temp_loader.check_preload()
+            temp_loader.check_preload()
 
         with torch.no_grad():
             text_features = x_text
@@ -325,7 +327,10 @@ class Diffusion:
                         )
                     )
                 style_images = style_colls[0]["images"]
-                style_features = style_colls[0]["features"]
+                # [n*5, feat] so the UNet reshape(b,5,-1) uses each image's writer
+                style_features = torch.cat(
+                    [sc["features"] for sc in style_colls], dim=0
+                )
             else:
                 style_images = None
                 style_features = None
