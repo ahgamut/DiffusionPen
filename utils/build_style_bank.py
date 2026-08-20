@@ -1,17 +1,26 @@
 """Build a precomputed per-writer style bank (stage-3 Part A).
 
-For each IAM writer (class index 0..338) this encodes *all* of that writer's
-word crops through the frozen ``ImageEncoder`` and stores the mean 1280-d vector,
-producing ``saved_iam_data/style_bank.pt`` = a ``[339, 1280]`` float tensor.
+For each writer in a merged word-dataset split this encodes the writer's word
+crops through the frozen ``ImageEncoder`` and stores the mean feature vector,
+producing a ``[W, feat]`` tensor where ``W`` is the split's writer count and
+``feat`` is the encoder's output width (``mobilenetv2_100`` -> 1280,
+``resnet18`` -> 512).
 
-The preprocessing (``iam_resizefix`` + ToTensor + Normalize) and the extractor
-weights (``--style-path``) are identical to the live style path in
-``models/diffpen2.py::get_style``, so a bank row is exactly the mean of the
-per-crop features the UNet already consumes -- only lower-variance (mean over
-all crops instead of 5 random) and reproducible.
+The crops, preprocessing (``dataset.transforms`` = ToTensor + Normalize) and the
+extractor weights (``--style-path`` / ``--style-name``) are identical to the live
+training/inference style path, so a bank row is exactly the mean of the per-crop
+features the UNet consumes -- only lower-variance (mean over all of a writer's
+crops instead of 5 random) and reproducible. Long-transcription crops (>3 chars)
+are preferred, matching the same-writer reference sampler
+(``MergedWordDataset._same_writer_pool``).
 
-Run on a GPU box:
-    python -m utils.build_style_bank --device cuda:0 --style-path <style.pth>
+This reads the merged memmap split (built by ``utils.build_multidataset``) rather
+than raw IAM, so it handles IAM/CVL/CSAFE and the global writer-id space; an
+IAM-only split is just the ``W=339`` special case.
+
+Run on a GPU box (build the merged split first):
+    python -m utils.build_style_bank --data-dir saved_iam_data/combined_word_train \\
+        --device cuda:0 --style-name resnet18 --style-path <style.pth>
 """
 
 import argparse
@@ -22,18 +31,18 @@ import torchvision
 from torchvision import transforms
 
 from models import ImageEncoder
-from utils.iam_temploader import IAM_TempLoader, iam_resizefix
+from utils.word_dataset import MergedWordDataset
 from utils.arghandle import add_common_args
-
-NUM_WRITERS = 339
-FEAT_DIM = 1280
 
 
 def load_extractor(args):
-    """Frozen mobilenet ImageEncoder with the trained style weights loaded
-    (partial, shape-matched) -- mirrors utils/model_setup.py."""
+    """Frozen ImageEncoder (``mobilenetv2_100`` or ``resnet18``) with the trained
+    style weights partially (shape-matched) loaded -- mirrors the extractor built
+    in utils/model_setup.py and train.py, sized by ``--style-name``."""
+    if args.style_name not in ("mobilenetv2_100", "resnet18"):
+        raise ValueError("unknown --style-name {!r}".format(args.style_name))
     enc = ImageEncoder(
-        model_name="mobilenetv2_100", num_classes=0, pretrained=True, trainable=True
+        model_name=args.style_name, num_classes=0, pretrained=True, trainable=True
     )
     state = torch.load(args.style_path, map_location=args.device, weights_only=True)
     model_dict = enc.state_dict()
@@ -50,48 +59,20 @@ def load_extractor(args):
     return enc
 
 
-def writer_crops(temp_loader, label_index):
-    """Absolute paths of a writer's crops with transcription length > 3 (the
-    same >3 filter the reference sampler uses); falls back to all crops."""
-    wid = temp_loader.map_index_to_wid(label_index)
-    rows = temp_loader.wmap.get(wid, [])
-    paths = [
-        os.path.join(temp_loader.root_path, r[0]) for r in rows if len(r[2]) > 3
-    ]
-    if not paths:
-        paths = [os.path.join(temp_loader.root_path, r[0]) for r in rows]
-    return paths
-
-
-def encode_mean(paths, enc, transform, args, batch=64):
-    """Mean feature vector over a writer's crops (streamed in batches)."""
-    from PIL import Image
-
-    total = torch.zeros(FEAT_DIM)
+def encode_mean(indices, dataset, enc, args):
+    """Mean feature vector over a writer's crops, streamed in batches through the
+    memmap-backed dataset with the same transforms training uses."""
+    total = None
     count = 0
-    buf = []
-
-    def flush():
-        nonlocal count, total, buf
-        if not buf:
-            return
-        x = torch.stack(buf).to(args.device)
-        with torch.no_grad():
-            feat = enc(x).detach().cpu()
-        total += feat.sum(dim=0)
-        count += feat.shape[0]
-        buf = []
-
-    for p in paths:
-        try:
-            img = Image.open(p).convert("RGB")
-        except Exception:
-            print("skip unreadable crop:", p)
-            continue
-        buf.append(transform(iam_resizefix(img)))
-        if len(buf) >= batch:
-            flush()
-    flush()
+    with torch.no_grad():
+        for start in range(0, len(indices), args.batch_size):
+            chunk = indices[start:start + args.batch_size]
+            batch = torch.stack(
+                [dataset.transforms(dataset._img(i)) for i in chunk]
+            ).to(args.device)
+            feat = enc(batch).detach().cpu()
+            total = feat.sum(dim=0) if total is None else total + feat.sum(dim=0)
+            count += feat.shape[0]
     if count == 0:
         return None
     return total / count
@@ -100,41 +81,67 @@ def encode_mean(paths, enc, transform, args, batch=64):
 def main():
     parser = argparse.ArgumentParser("build-style-bank")
     parser.add_argument(
-        "--out", type=str, default="./saved_iam_data/style_bank.pt",
-        help="output path for the [339,1280] bank tensor",
+        "--data-dir", type=str,
+        default="./saved_iam_data/combined_word_train",
+        help="merged split directory built by utils/build_multidataset.py",
     )
+    parser.add_argument(
+        "--out", type=str, default="./saved_iam_data/style_bank.pt",
+        help="output path for the [W, feat] bank tensor",
+    )
+    parser.add_argument("--batch-size", type=int, default=64)
     add_common_args(parser)
     args = parser.parse_args()
-
-    if args.dataset != "iam":
-        raise ValueError("style bank build only supports the IAM dataset")
 
     transform = transforms.Compose([
         transforms.ToTensor(),
         torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
 
-    IAM_TempLoader.check_preload()
+    dataset = MergedWordDataset(args.data_dir, transforms=transform)
+    # Size to the same writer count the model uses: an explicit --style-classes
+    # override (matches model_setup), else the split's writer count W. The merged
+    # builder assigns contiguous global ids 0..W-1, so wclasses == W == max+1.
+    num_writers = int(getattr(args, "style_classes", 0) or 0) or dataset.wclasses
     enc = load_extractor(args)
 
-    bank = torch.zeros((NUM_WRITERS, FEAT_DIM))
+    feats_by_writer = {}
+    feat_dim = None
     missing = []
-    for idx in range(NUM_WRITERS):
-        paths = writer_crops(IAM_TempLoader, idx)
-        mean = encode_mean(paths, enc, transform, args)
+    writer_ids = sorted(dataset.writer_to_indices.keys())
+    for n, wid in enumerate(writer_ids):
+        idxs = dataset._same_writer_pool(wid)
+        mean = encode_mean(idxs, dataset, enc, args)
         if mean is None:
-            missing.append(idx)
+            missing.append(wid)
             continue
-        bank[idx] = mean
-        if idx % 25 == 0:
-            print(f"writer {idx}/{NUM_WRITERS}: {len(paths)} crops")
+        feats_by_writer[wid] = mean
+        feat_dim = mean.numel()
+        if n % 25 == 0:
+            print("writer {}/{} (wid {}): {} crops".format(
+                n, len(writer_ids), wid, len(idxs)))
 
+    if feat_dim is None:
+        raise RuntimeError("no writers encoded -- empty dataset at " + args.data_dir)
+
+    bank = torch.zeros(num_writers, feat_dim)
+    out_of_range = []
+    for wid, vec in feats_by_writer.items():
+        if 0 <= wid < num_writers:
+            bank[wid] = vec.to(bank.dtype)
+        else:
+            out_of_range.append(wid)
+
+    if out_of_range:
+        print("WARNING: writer ids out of [0,{}) skipped: {}".format(
+            num_writers, out_of_range))
     if missing:
-        print("WARNING: no crops for writer indices", missing)
+        print("WARNING: no crops for writer ids", missing)
 
-    os.makedirs(os.path.dirname(args.out), exist_ok=True)
+    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     torch.save(bank, args.out)
-    print("saved style bank", args.out, tuple(bank.shape))
+    print("saved style bank", args.out, tuple(bank.shape),
+          "| style-name", args.style_name, "| writers", num_writers)
 
 
 if __name__ == "__main__":
