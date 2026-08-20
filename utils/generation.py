@@ -582,3 +582,40 @@ def build_fake_interp_N(
             max_word_length_width = im.width
         fakes.append(im)
     return fakes, max_word_length_width
+
+
+def render_paragraph(words, args, models, max_line_width, s=None, interp=False):
+    """Generate crops for ``words`` and lay them out as one paragraph image.
+
+    Bundles the three-call sequence repeated across the generation scripts:
+    ``build_fake_{image,interp}_N`` -> ``add_rescale_padding`` ->
+    ``build_paragraph_image``. Static-style paragraphs pass ``s`` (writer id);
+    interpolated paragraphs pass ``interp=True`` and set
+    ``args.writer_1``/``writer_2``/``mix_rate`` (the interp builder reads the
+    writers off ``args``).
+    """
+    longest_word_length = max(len(word) for word in words)
+    if interp:
+        fakes, max_word_length_width = build_fake_interp_N(
+            words,
+            args,
+            models,
+            longest_word_length=longest_word_length,
+            max_word_length_width=0,
+        )
+    else:
+        fakes, max_word_length_width = build_fake_image_N(
+            words,
+            s,
+            args,
+            models,
+            longest_word_length=longest_word_length,
+            max_word_length_width=0,
+        )
+    scaled_padded_words = add_rescale_padding(
+        words,
+        fakes,
+        max_word_length_width=max_word_length_width,
+        longest_word_length=longest_word_length,
+    )
+    return build_paragraph_image(scaled_padded_words, max_line_width=max_line_width)
