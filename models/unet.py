@@ -73,10 +73,6 @@ def exists(val):
     return val is not None
 
 
-def uniq(arr):
-    return {el: True for el in arr}.keys()
-
-
 def default(val, d):
     if exists(val):
         return val
@@ -85,13 +81,6 @@ def default(val, d):
 
 def max_neg_value(t):
     return -torch.finfo(t.dtype).max
-
-
-def init_(tensor):
-    dim = tensor.shape[-1]
-    std = 1 / math.sqrt(dim)
-    tensor.uniform_(-std, std)
-    return tensor
 
 
 def timestep_embedding(timesteps, dim, max_period=10000, repeat_only=False):
@@ -119,29 +108,6 @@ def timestep_embedding(timesteps, dim, max_period=10000, repeat_only=False):
     else:
         embedding = repeat(timesteps, "b -> b d", d=dim)
     return embedding
-
-
-def get_sinusoid_encoding_table(n_position, d_hid, padding_idx=None):
-    """Sinusoid position encoding table"""
-
-    def cal_angle(position, hid_idx):
-        return position / np.power(10000, 2 * (hid_idx // 2) / d_hid)
-
-    def get_posi_angle_vec(position):
-        return [cal_angle(position, hid_j) for hid_j in range(d_hid)]
-
-    sinusoid_table = np.array(
-        [get_posi_angle_vec(pos_i) for pos_i in range(n_position)]
-    )
-
-    sinusoid_table[:, 0::2] = np.sin(sinusoid_table[:, 0::2])  # dim 2i
-    sinusoid_table[:, 1::2] = np.cos(sinusoid_table[:, 1::2])  # dim 2i+1
-
-    if padding_idx is not None:
-        # zero vector for padding dimension
-        sinusoid_table[padding_idx] = 0.0
-
-    return torch.FloatTensor(sinusoid_table)
 
 
 # feedforward
@@ -234,18 +200,6 @@ class CrossAttention(nn.Module):
         return self.to_out(out)
 
 
-def get_subsequent_mask(seq):
-    """For masking out the subsequent info."""
-    #'seq shape', seq.shape)
-    sz_b, len_s = seq.size()
-    subsequent_mask = torch.triu(
-        torch.ones((len_s, len_s), device=seq.device, dtype=torch.uint8), diagonal=1
-    )
-    subsequent_mask = subsequent_mask.unsqueeze(0).expand(sz_b, -1, -1)  # b x ls x ls
-
-    return subsequent_mask
-
-
 def conv_nd(dims, *args, **kwargs):
     """
     Create a 1D, 2D, or 3D convolution module.
@@ -302,50 +256,6 @@ class BasicTransformerBlock(nn.Module):
         # print('x shape', x.shape)
         # print('context shape', context.shape)
         x = self.attn2(self.norm2(x), context=context, mask=None) + x
-        x = self.ff(self.norm3(x)) + x
-        return x
-
-
-class Style_Text_Encoder(nn.Module):
-    def __init__(
-        self,
-        dim,
-        n_heads,
-        d_head,
-        dropout=0.0,
-        context_dim=None,
-        gated_ff=True,
-        checkpoint=True,
-    ):
-        super().__init__()
-        # self.weights = ResNet18_Weights.DEFAULT
-
-        # num_ftrs = self.image_encoder.fc.in_features
-        # self.attn1 = CrossAttention(query_dim=dim, heads=n_heads, dim_head=d_head, dropout=dropout)  # is a self-attention for the image
-        # self.attnc = CrossAttention(query_dim=dim, heads=n_heads, dim_head=d_head, dropout=dropout)  # is a self-attention for the context
-        self.ff = FeedForward(dim, dropout=dropout, glu=gated_ff)
-        self.attn2 = CrossAttention(
-            query_dim=dim,
-            context_dim=context_dim,
-            heads=n_heads,
-            dim_head=d_head,
-            dropout=dropout,
-        )  # is self-attn if context is none
-        self.norm1 = nn.LayerNorm(dim)
-        self.norm2 = nn.LayerNorm(dim)
-        self.norm3 = nn.LayerNorm(dim)
-        self.checkpoint = checkpoint
-
-    def forward(self, x, context=None):
-        return checkpoint(
-            self._forward, (x, context), self.parameters(), self.checkpoint
-        )
-
-    def _forward(self, x, context=None):
-
-        # x = self.attn1(self.norm1(x)) + x
-        x = self.attn2(x, context=context, mask=None) + x
-        # x = self.attn2(self.norm2(x), context=context, mask=None) + x
         x = self.ff(self.norm3(x)) + x
         return x
 
@@ -498,22 +408,6 @@ class Upsample(nn.Module):
         return x
 
 
-class TransposedUpsample(nn.Module):
-    "Learned 2x upsampling without padding"
-
-    def __init__(self, channels, out_channels=None, ks=5):
-        super().__init__()
-        self.channels = channels
-        self.out_channels = out_channels or channels
-
-        self.up = nn.ConvTranspose2d(
-            self.channels, self.out_channels, kernel_size=ks, stride=2
-        )
-
-    def forward(self, x):
-        return self.up(x)
-
-
 class Downsample(nn.Module):
     """
     A downsampling layer with an optional convolution.
@@ -657,116 +551,6 @@ class ResBlock(TimestepBlock):
             h = h + emb_out
             h = self.out_layers(h)
 
-        return self.skip_connection(x) + h
-
-
-class Res_Block(nn.Module):
-    """
-    A residual block that can optionally change the number of channels.
-    :param channels: the number of input channels.
-    :param emb_channels: the number of timestep embedding channels.
-    :param dropout: the rate of dropout.
-    :param out_channels: if specified, the number of out channels.
-    :param use_conv: if True and out_channels is specified, use a spatial
-        convolution instead of a smaller 1x1 convolution to change the
-        channels in the skip connection.
-    :param dims: determines if the signal is 1D, 2D, or 3D.
-    :param use_checkpoint: if True, use gradient checkpointing on this module.
-    :param up: if True, use this block for upsampling.
-    :param down: if True, use this block for downsampling.
-    """
-
-    def __init__(
-        self,
-        channels,
-        emb_channels,
-        dropout,
-        out_channels=None,
-        use_conv=False,
-        use_scale_shift_norm=False,
-        dims=2,
-        use_checkpoint=False,
-        up=False,
-        down=False,
-    ):
-        super().__init__()
-        self.channels = channels
-        self.emb_channels = emb_channels
-        self.dropout = dropout
-        self.out_channels = out_channels or channels
-        self.use_conv = use_conv
-        self.use_checkpoint = use_checkpoint
-        self.use_scale_shift_norm = use_scale_shift_norm
-
-        self.in_layers = nn.Sequential(
-            normalization(channels),
-            nn.SiLU(),
-            nn.Conv2d(channels, self.out_channels, 3, padding=1),
-        )
-
-        self.updown = up or down
-
-        if up:
-            self.h_upd = Upsample(channels, False, dims)
-            self.x_upd = Upsample(channels, False, dims)
-        elif down:
-            self.h_upd = Downsample(channels, False, dims)
-            self.x_upd = Downsample(channels, False, dims)
-        else:
-            self.h_upd = self.x_upd = nn.Identity()
-
-        self.emb_layers = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(
-                emb_channels,
-                2 * self.out_channels if use_scale_shift_norm else self.out_channels,
-            ),
-        )
-        self.out_layers = nn.Sequential(
-            normalization(self.out_channels),
-            nn.SiLU(),
-            nn.Dropout(p=dropout),
-            zero_module(nn.Conv2d(self.out_channels, self.out_channels, 3, padding=1)),
-        )
-
-        if self.out_channels == channels:
-            self.skip_connection = nn.Identity()
-        elif use_conv:
-            self.skip_connection = nn.Conv2d(channels, self.out_channels, 3, padding=1)
-        else:
-            self.skip_connection = nn.Conv2d(channels, self.out_channels, 1)
-
-    def forward(self, x, emb):
-        """
-        Apply the block to a Tensor, conditioned on a timestep embedding.
-        :param x: an [N x C x ...] Tensor of features.
-        :param emb: an [N x emb_channels] Tensor of timestep embeddings.
-        :return: an [N x C x ...] Tensor of outputs.
-        """
-        return checkpoint(
-            self._forward, (x, emb), self.parameters(), self.use_checkpoint
-        )
-
-    def _forward(self, x, emb):
-        if self.updown:
-            in_rest, in_conv = self.in_layers[:-1], self.in_layers[-1]
-            h = in_rest(x)
-            h = self.h_upd(h)
-            x = self.x_upd(x)
-            h = in_conv(h)
-        else:
-            h = self.in_layers(x)
-        emb_out = self.emb_layers(emb).type(h.dtype)
-        while len(emb_out.shape) < len(h.shape):
-            emb_out = emb_out[..., None]
-        if self.use_scale_shift_norm:
-            out_norm, out_rest = self.out_layers[0], self.out_layers[1:]
-            scale, shift = torch.chunk(emb_out, 2, dim=1)
-            h = out_norm(h) * (1 + scale) + shift
-            h = out_rest(h)
-        else:
-            h = h + emb_out
-            h = self.out_layers(h)
         return self.skip_connection(x) + h
 
 
