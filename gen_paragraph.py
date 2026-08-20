@@ -57,16 +57,6 @@ def main():
     torch.cuda.empty_cache()
 
     m = load_models(args)
-    diffusion = m["diffusion"]
-    ema_model = m["ema_model"]
-    vae = m["vae"]
-    ddim = m["ddim"]
-    feature_extractor = m["feature_extractor"]
-    transform = m["transform"]
-    tokenizer = m["tokenizer"]
-    text_encoder = m["text_encoder"]
-    placer = m["placer"]
-    upsampler = m["upsampler"]
 
     # make the code to generate lines
     lines = open(args.text_file).read()
@@ -81,14 +71,7 @@ def main():
         words,
         s=s,
         args=args,
-        diffusion=diffusion,
-        ema_model=ema_model,
-        vae=vae,
-        feature_extractor=feature_extractor,
-        ddim=ddim,
-        transform=transform,
-        tokenizer=tokenizer,
-        text_encoder=text_encoder,
+        models=m,
         longest_word_length=longest_word_length,
         max_word_length_width=max_word_length_width,
     )
@@ -97,10 +80,10 @@ def main():
     up_scale = 1
     if args.upsample:
         up_scale = 2
-        fakes = upsample_words(fakes, upsampler=upsampler, args=args, scale=up_scale)
+        fakes = upsample_words(fakes, args, m, scale=up_scale)
 
     if args.placement == "learned":
-        if placer is None:
+        if m["placer"] is None:
             raise RuntimeError(
                 "--placement learned requires --placer-path to a valid checkpoint"
             )
@@ -108,10 +91,8 @@ def main():
             words,
             fakes,
             writer_id=s,
-            placer=placer,
-            tokenizer=tokenizer,
-            text_encoder=text_encoder,
             args=args,
+            models=m,
             max_line_width=max_line_width * up_scale,
             ref_height=64 * up_scale,
         )

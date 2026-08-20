@@ -36,14 +36,6 @@ def main():
     torch.cuda.empty_cache()
 
     m = load_models(args)
-    diffusion = m["diffusion"]
-    ema_model = m["ema_model"]
-    vae = m["vae"]
-    ddim = m["ddim"]
-    feature_extractor = m["feature_extractor"]
-    transform = m["transform"]
-    tokenizer = m["tokenizer"]
-    text_encoder = m["text_encoder"]
 
     lines = open(args.text_file).read()
     words = lines.strip().split(" ")
@@ -68,14 +60,7 @@ def main():
                 words,
                 s=s1,
                 args=args,
-                diffusion=diffusion,
-                ema_model=ema_model,
-                vae=vae,
-                feature_extractor=feature_extractor,
-                ddim=ddim,
-                transform=transform,
-                tokenizer=tokenizer,
-                text_encoder=text_encoder,
+                models=m,
                 longest_word_length=longest_word_length,
                 max_word_length_width=max_word_length_width,
             )
@@ -96,14 +81,7 @@ def main():
                 words,
                 s=s2,
                 args=args,
-                diffusion=diffusion,
-                ema_model=ema_model,
-                vae=vae,
-                feature_extractor=feature_extractor,
-                ddim=ddim,
-                transform=transform,
-                tokenizer=tokenizer,
-                text_encoder=text_encoder,
+                models=m,
                 longest_word_length=longest_word_length,
                 max_word_length_width=max_word_length_width,
             )
@@ -125,14 +103,7 @@ def main():
                 fakes, max_word_length_width = build_fake_interp_N(
                     words,
                     args=args,
-                    diffusion=diffusion,
-                    ema_model=ema_model,
-                    vae=vae,
-                    feature_extractor=feature_extractor,
-                    ddim=ddim,
-                    transform=transform,
-                    tokenizer=tokenizer,
-                    text_encoder=text_encoder,
+                    models=m,
                     longest_word_length=longest_word_length,
                     max_word_length_width=max_word_length_width,
                 )

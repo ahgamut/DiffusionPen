@@ -48,14 +48,6 @@ def main():
     torch.cuda.empty_cache()
 
     m = load_models(args)
-    diffusion = m["diffusion"]
-    ema_model = m["ema_model"]
-    vae = m["vae"]
-    ddim = m["ddim"]
-    feature_extractor = m["feature_extractor"]
-    transform = m["transform"]
-    tokenizer = m["tokenizer"]
-    text_encoder = m["text_encoder"]
 
     # make the code to generate lines
     lines = open(args.text_file).read()
@@ -70,14 +62,7 @@ def main():
         words,
         s=s,
         args=args,
-        diffusion=diffusion,
-        ema_model=ema_model,
-        vae=vae,
-        feature_extractor=feature_extractor,
-        ddim=ddim,
-        transform=transform,
-        tokenizer=tokenizer,
-        text_encoder=text_encoder,
+        models=m,
         longest_word_length=longest_word_length,
         max_word_length_width=max_word_length_width,
         crop_whitespace=True,

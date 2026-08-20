@@ -28,7 +28,9 @@ from utils.model_setup import load_models
 
 
 class CTX:
-    mldict = dict()
+    models = None
+    args = None
+    cpj = None
 
 
 def save_threshed(img, fname):
@@ -91,9 +93,10 @@ def resave_fake(xmlname, imgname, targname, faketype):
         fakes, max_word_length_width = build_fake_image_N(
             words,
             s,
+            CTX.args,
+            CTX.models,
             longest_word_length=longest_word_length,
             max_word_length_width=max_word_length_width,
-            **CTX.mldict,
         )
         regen_img = build_ref_paragraph(
             fakes,
@@ -108,42 +111,45 @@ def resave_fake(xmlname, imgname, targname, faketype):
         print("should regenerate", imgname, "place however and save")
         words = [w.raw for w in xpr.words]
         longest_word_length = max(len(word) for word in words)
-        max_line_width = CTX.mldict["args"].max_line_width
+        max_line_width = CTX.args.max_line_width
         max_word_length_width = 0
         fakes, max_word_length_width = build_fake_image_N(
             words,
             s,
+            CTX.args,
+            CTX.models,
             longest_word_length=longest_word_length,
             max_word_length_width=max_word_length_width,
-            **CTX.mldict,
         )
     elif "difftext1" in faketype:
         print("should generate LL using wid from", imgname, "and save")
         lines = open("./prompts/london-letter.txt").read()
         words = lines.strip().split(" ")
         longest_word_length = max(len(word) for word in words)
-        max_line_width = CTX.mldict["args"].max_line_width
+        max_line_width = CTX.args.max_line_width
         max_word_length_width = 0
         fakes, max_word_length_width = build_fake_image_N(
             words,
             s,
+            CTX.args,
+            CTX.models,
             longest_word_length=longest_word_length,
             max_word_length_width=max_word_length_width,
-            **CTX.mldict,
         )
     elif "difftext2" in faketype:
         print("should generate WOZ using wid from", imgname, "and save")
         lines = open("./prompts/woz-letter.txt").read()
         words = lines.strip().split(" ")
         longest_word_length = max(len(word) for word in words)
-        max_line_width = CTX.mldict["args"].max_line_width
+        max_line_width = CTX.args.max_line_width
         max_word_length_width = 0
         fakes, max_word_length_width = build_fake_image_N(
             words,
             s,
+            CTX.args,
+            CTX.models,
             longest_word_length=longest_word_length,
             max_word_length_width=max_word_length_width,
-            **CTX.mldict,
         )
 
     postparts = faketype.split("-")
@@ -207,15 +213,16 @@ def resave_interp(xmlname, imgname, targname, widinfo, interp):
         s1 = IAM_TempLoader.map_wid_to_index(wid1)
         s2 = IAM_TempLoader.map_wid_to_index(wid2)
         max_line_width = raw_crop.width
-        CTX.mldict["args"].writer_1 = s1
-        CTX.mldict["args"].writer_2 = s2
-        CTX.mldict["args"].mix_rate = alpha
+        CTX.args.writer_1 = s1
+        CTX.args.writer_2 = s2
+        CTX.args.mix_rate = alpha
         max_word_length_width = 0
         fakes, max_word_length_width = build_fake_interp_N(
             words,
+            CTX.args,
+            CTX.models,
             longest_word_length=longest_word_length,
             max_word_length_width=max_word_length_width,
-            **CTX.mldict,
         )
         regen_img2 = build_ref_paragraph(
             fakes,
@@ -239,16 +246,17 @@ def resave_interp(xmlname, imgname, targname, widinfo, interp):
         longest_word_length = max(len(word) for word in words)
         s1 = IAM_TempLoader.map_wid_to_index(wid1)
         s2 = IAM_TempLoader.map_wid_to_index(wid2)
-        max_line_width = CTX.mldict["args"].max_line_width
-        CTX.mldict["args"].writer_1 = s1
-        CTX.mldict["args"].writer_2 = s2
-        CTX.mldict["args"].mix_rate = alpha
+        max_line_width = CTX.args.max_line_width
+        CTX.args.writer_1 = s1
+        CTX.args.writer_2 = s2
+        CTX.args.mix_rate = alpha
         max_word_length_width = 0
         fakes, max_word_length_width = build_fake_interp_N(
             words,
+            CTX.args,
+            CTX.models,
             longest_word_length=longest_word_length,
             max_word_length_width=max_word_length_width,
-            **CTX.mldict,
         )
         regen_img = build_placed_paragraph(
             words,
@@ -315,10 +323,10 @@ def main():
     setup_logging(args)
     torch.cuda.empty_cache()
 
-    CTX.mldict.update(load_models(args))
-    CTX.mldict["args"] = args
+    CTX.models = load_models(args)
+    CTX.args = args
     with open("utils/char_placing.json", "r") as fp:
-        CTX.mldict["cpj"] = json.load(fp)
+        CTX.cpj = json.load(fp)
     IAM_TempLoader.check_preload()
 
     ####

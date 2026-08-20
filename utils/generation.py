@@ -252,8 +252,9 @@ def upsample_word(im, upsampler=None, args=None, scale=2):
     return Image.fromarray(y).convert("L")
 
 
-def upsample_words(fakes, upsampler=None, args=None, scale=2):
+def upsample_words(fakes, args, models, scale=2):
     """Apply upsample_word to a list of word crops."""
+    upsampler = models["upsampler"]
     return [upsample_word(im, upsampler, args, scale) for im in fakes]
 
 
@@ -269,10 +270,8 @@ def place_words_learned(
     words,
     fakes,
     writer_id,
-    placer,
-    tokenizer,
-    text_encoder,
     args,
+    models,
     max_line_width=900,
     ref_height=64,
     left_margin=16,
@@ -297,6 +296,10 @@ def place_words_learned(
     # imported lazily so the heavy torch text-encoder path is only pulled in when
     # learned placement is actually requested
     from utils.placer_seq import sequence_text_features
+
+    placer = models["placer"]
+    tokenizer = models["tokenizer"]
+    text_encoder = models["text_encoder"]
 
     n = len(fakes)
     if n == 0:
@@ -393,20 +396,31 @@ def stack_images(images, margin=0, background="white"):
 #####
 
 
+def _sampling_models(models):
+    """Unpack the load_models() bundle into the ordered tuple the sampling
+    builders use: (diffusion, ema_model, vae, feature_extractor, ddim,
+    transform, tokenizer, text_encoder)."""
+    return (
+        models["diffusion"],
+        models["ema_model"],
+        models["vae"],
+        models["feature_extractor"],
+        models["ddim"],
+        models["transform"],
+        models["tokenizer"],
+        models["text_encoder"],
+    )
+
+
 def build_fake_image_1(
     word,
     writer_id,
     args,
-    diffusion,
-    ema_model,
-    vae,
-    feature_extractor,
-    ddim,
-    transform,
-    tokenizer,
-    text_encoder,
+    models,
     crop_whitespace=True,
 ):
+    (diffusion, ema_model, vae, feature_extractor, ddim, transform,
+     tokenizer, text_encoder) = _sampling_models(models)
     # print("Word:", word)
     labels = torch.tensor([writer_id]).long().to(args.device)
     ema_sampled_images = diffusion.sampling(
@@ -435,16 +449,11 @@ def build_fake_image_1(
 
 def build_fake_interp_1(
     args,
-    diffusion,
-    ema_model,
-    vae,
-    feature_extractor,
-    ddim,
-    transform,
-    tokenizer,
-    text_encoder,
+    models,
     crop_whitespace=True,
 ):
+    (diffusion, ema_model, vae, feature_extractor, ddim, transform,
+     tokenizer, text_encoder) = _sampling_models(models)
     # print("Word:", word)
     word = args.sampling_word
     writer_1 = args.writer_1
@@ -477,18 +486,13 @@ def build_fake_image_N(
     words,
     s,
     args,
-    diffusion,
-    ema_model,
-    vae,
-    feature_extractor,
-    ddim,
-    transform,
-    tokenizer,
-    text_encoder,
+    models,
     longest_word_length,
     max_word_length_width,
     crop_whitespace=True,
 ):
+    (diffusion, ema_model, vae, feature_extractor, ddim, transform,
+     tokenizer, text_encoder) = _sampling_models(models)
     labels = torch.tensor([s]).long().to(args.device)
 
     # Expand long words into fixed-canvas chunks; each chunk is generated as its
@@ -540,18 +544,13 @@ def build_fake_image_N(
 def build_fake_interp_N(
     words,
     args,
-    diffusion,
-    ema_model,
-    vae,
-    feature_extractor,
-    ddim,
-    transform,
-    tokenizer,
-    text_encoder,
+    models,
     longest_word_length,
     max_word_length_width,
     crop_whitespace=True,
 ):
+    (diffusion, ema_model, vae, feature_extractor, ddim, transform,
+     tokenizer, text_encoder) = _sampling_models(models)
     fakes = []
     writer_1 = args.writer_1
     writer_2 = args.writer_2

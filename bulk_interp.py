@@ -32,14 +32,6 @@ def main():
     torch.cuda.empty_cache()
 
     m = load_models(args)
-    diffusion = m["diffusion"]
-    ema_model = m["ema_model"]
-    vae = m["vae"]
-    ddim = m["ddim"]
-    feature_extractor = m["feature_extractor"]
-    transform = m["transform"]
-    tokenizer = m["tokenizer"]
-    text_encoder = m["text_encoder"]
 
     w = 0.1
     weights = np.arange(0, 1 + w, w)
@@ -53,14 +45,7 @@ def main():
 
                 im = build_fake_interp_1(
                     args=args,
-                    diffusion=diffusion,
-                    ema_model=ema_model,
-                    vae=vae,
-                    feature_extractor=feature_extractor,
-                    ddim=ddim,
-                    transform=transform,
-                    tokenizer=tokenizer,
-                    text_encoder=text_encoder,
+                    models=m,
                 )
                 imgs.append(im)
             dst = stack_images(imgs)

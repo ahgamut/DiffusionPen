@@ -4,7 +4,7 @@ import argparse
 #
 from utils.generation import (
     setup_logging,
-    build_fake_image,
+    build_fake_image_1,
 )
 from utils.arghandle import add_common_args
 from utils.model_setup import load_models
@@ -25,30 +25,15 @@ def main():
     torch.cuda.empty_cache()
 
     m = load_models(args)
-    diffusion = m["diffusion"]
-    ema_model = m["ema_model"]
-    vae = m["vae"]
-    ddim = m["ddim"]
-    feature_extractor = m["feature_extractor"]
-    transform = m["transform"]
-    tokenizer = m["tokenizer"]
-    text_encoder = m["text_encoder"]
 
     word = args.sampling_word
     writer_id = args.writer_id  # index for style class
 
-    image = build_fake_image(
+    image = build_fake_image_1(
         word,
         writer_id,
         args,
-        diffusion,
-        ema_model,
-        vae,
-        feature_extractor,
-        ddim,
-        transform,
-        tokenizer,
-        text_encoder,
+        m,
     )
     image.save(args.output)
 
