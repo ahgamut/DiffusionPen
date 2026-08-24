@@ -8,7 +8,12 @@ from torch.nn import DataParallel
 from transformers import CanineModel, CanineTokenizer
 
 from models import WordPlacer, AvgMeter
-from utils.placer_seq import IAMSequenceDataset, sequence_text_features
+from utils.placer_seq import (
+    DEFAULT_WRITERS_DIR,
+    IAMSequenceDataset,
+    load_num_writers,
+    sequence_text_features,
+)
 from utils.generation import setup_logging
 from utils.arghandle import add_common_args
 from utils.training_utils import get_loaders
@@ -90,6 +95,12 @@ def main():
     parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument(
+        "--data-dir",
+        default=DEFAULT_WRITERS_DIR,
+        help="merged split dir holding writers_global.json (global-W id space + "
+        "writer count for the placer's embedding)",
+    )
     add_common_args(parser)
     args = parser.parse_args()
     setup_logging(args)
@@ -97,7 +108,11 @@ def main():
     if args.dataset != "iam":
         raise ValueError("placer_seq_train only supports the IAM dataset")
 
-    dset = IAMSequenceDataset()
+    # Global writer count W (from the merged split); the placer shares this id
+    # space with the style bank so a single --writer-id is consistent at
+    # inference. Only IAM writers get trained rows (paragraph data is IAM-only).
+    num_writers = load_num_writers(args.data_dir)
+    dset = IAMSequenceDataset(writers_dir=args.data_dir)
     train_loader, test_loader = get_loaders(dset, args.batch_size)
 
     if args.dataparallel:
@@ -112,7 +127,7 @@ def main():
     text_encoder = text_encoder.to(args.device)
     frz(text_encoder)
 
-    placer = WordPlacer(num_writers=339)
+    placer = WordPlacer(num_writers=num_writers)
     placer = DataParallel(placer, device_ids=device_ids)
     placer = placer.to(args.device)
     # Seed the stat buffers from the dataset before any (optional) checkpoint

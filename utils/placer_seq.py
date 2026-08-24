@@ -29,13 +29,37 @@ from torch.utils.data import Dataset
 from utils.subprompt import Word
 
 SEQ_CACHE = "placer_IAM_seq2.pt"
-WRITERS_DICT = "utils/writers_dict_train_iam.json"
+WRITERS_GLOBAL = "writers_global.json"
+DEFAULT_WRITERS_DIR = "./saved_iam_data/combined_word_train"
 _PUNCT = set(".,;:!?\"')")
 
 
-def load_writer_index():
-    with open(WRITERS_DICT, "r") as f:
-        return json.load(f)
+def load_writer_index(writers_dir=DEFAULT_WRITERS_DIR):
+    """Map each raw IAM writer id (e.g. ``"049"``) to its **global** contiguous
+    writer id from the merged split's ``writers_global.json`` (``writer_to_wid``
+    keyed ``"IAM/<writer>"``).
+
+    The placer trains only on IAM paragraph data, but shares the global-W id
+    space so a single ``--writer-id`` means the same writer to both the placer
+    and the style bank at inference. Non-IAM (CVL/CSAFE) writers occupy rows the
+    placer never sees during training (paragraph layout data is IAM-only)."""
+    reg_path = os.path.join(writers_dir, WRITERS_GLOBAL)
+    with open(reg_path, "r") as f:
+        writer_to_wid = json.load(f)["writer_to_wid"]
+    prefix = "IAM/"
+    return {
+        key[len(prefix):]: wid
+        for key, wid in writer_to_wid.items()
+        if key.startswith(prefix)
+    }
+
+
+def load_num_writers(writers_dir=DEFAULT_WRITERS_DIR):
+    """Global writer count ``W`` from the merged split's registry. Sizes the
+    placer's ``writer_emb`` + per-writer ``line_advance`` buffer so its id space
+    matches the style bank (only IAM rows are trained; see load_writer_index)."""
+    with open(os.path.join(writers_dir, WRITERS_GLOBAL), "r") as f:
+        return int(json.load(f)["n_writers"])
 
 
 def _after_punct(prev):
@@ -183,8 +207,9 @@ class IAMSequenceDataset(Dataset):
     ``placer_IAM.pt`` (produced by IAMPlacerDataset) and caches the assembled
     sequences + dataset stats in ``placer_IAM_seq2.pt``."""
 
-    def __init__(self, savefolder="./saved_iam_data"):
+    def __init__(self, savefolder="./saved_iam_data", writers_dir=DEFAULT_WRITERS_DIR):
         self.savefolder = savefolder
+        self.writers_dir = writers_dir
         self.sequences = []
         self.stats = {}
         self.finalize()
@@ -210,7 +235,7 @@ class IAMSequenceDataset(Dataset):
         from utils.placer_iam import load_placer_store
 
         store = load_placer_store(self.savefolder)
-        writer_index = load_writer_index()
+        writer_index = load_writer_index(self.writers_dir)
         self.sequences, self.stats = build_sequences(store.words, writer_index)
         torch.save({"sequences": self.sequences, "stats": self.stats}, seq_file)
         print("saved", seq_file)

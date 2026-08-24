@@ -7,6 +7,7 @@ cd "$DP_ROOT"
 
 $PY placer_seq_train.py \
   --dataset iam \
+  --data-dir "$DATA_DIR" \
   --device "$DEVICE" \
   --epochs "$EPOCHS" \
   --batch-size "${PLACER_BATCH:-32}" \
