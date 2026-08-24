@@ -77,6 +77,28 @@ def load_models(args):
         bank_path = getattr(args, "style_bank_path", None)
         if bank_path and os.path.isfile(bank_path):
             bank = torch.load(bank_path, map_location=args.device, weights_only=True)
+            # Fail loud on a bank that does not match this checkpoint.
+            if bank.shape[0] != style_classes:
+                raise ValueError(
+                    "style bank writer count {} != model writer count {} ({}); the "
+                    "bank was built from a different split -- rebuild it with "
+                    "utils/build_style_bank.py against the training --data-dir".format(
+                        bank.shape[0], style_classes, bank_path
+                    )
+                )
+            slin = next(
+                (v for k, v in unet_sd.items() if k.endswith("style_lin.weight")),
+                None,
+            )
+            if slin is not None and bank.shape[1] != slin.shape[1]:
+                raise ValueError(
+                    "style bank feature dim {} != model style_lin input {}; the bank "
+                    "was built with a different --style-name than the checkpoint was "
+                    "trained with (e.g. mobilenetv2_100=1280 vs resnet18=512) -- "
+                    "rebuild it with the matching --style-name".format(
+                        bank.shape[1], slin.shape[1]
+                    )
+                )
             diffusion.style_bank = bank.to(args.device)
             print("loaded style bank from", bank_path, tuple(bank.shape))
 

@@ -30,15 +30,30 @@ class Diffusion:
         return torch.linspace(self.beta_start, self.beta_end, self.noise_steps)
 
     def get_style_coll(self, label_index, args):
-        # Bank lookup: tile the writer's mean vector to [5, 1280] so the UNet's
-        # reshape(b,5,1280)->mean returns exactly that mean. The precomputed
-        # style bank is the only style source at inference (the raw-IAM CNN path
-        # was removed); callers must load one via --style-bank / --style-bank-path.
+        # Tile the writer's mean vector to [5, 1280] so the UNet reshape->mean
+        # returns it. The bank is the only style source at inference.
         if self.style_bank is None:
             raise RuntimeError(
                 "inference requires a style bank; pass --style-bank / --style-bank-path"
             )
+        n_writers = self.style_bank.shape[0]
+        if not (0 <= label_index < n_writers):
+            raise IndexError(
+                "writer id {} out of range for style bank [0, {}); the bank's "
+                "writer-id space does not match this model -- rebuild it from the "
+                "same split with utils/build_style_bank.py".format(
+                    label_index, n_writers
+                )
+            )
         vec = self.style_bank[label_index].to(args.device)
+        if not torch.any(vec):
+            raise RuntimeError(
+                "style bank row for writer id {} is all zeros (unpopulated writer). "
+                "The bank is stale or was built from a different split -- every "
+                "writer id would collapse to the same output. Rebuild it with "
+                "utils/build_style_bank.py (matching --data-dir/--style-name/"
+                "--style-path to the trained checkpoint).".format(label_index)
+            )
         s_feat = vec.unsqueeze(0).expand(5, -1).contiguous()
         return {"images": None, "features": s_feat}
 
