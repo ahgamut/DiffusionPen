@@ -561,6 +561,13 @@ def main():
         diffusion.style_bank = build_preview_style_bank(
             train_data, feature_extractor, style_classes, args
         )
+        # Persist it so inference has a bank matched to this checkpoint.
+        bank_path = getattr(args, "style_bank_path", None)
+        if bank_path:
+            os.makedirs(os.path.dirname(bank_path) or ".", exist_ok=True)
+            torch.save(diffusion.style_bank.cpu(), bank_path)
+            print("saved style bank ->", bank_path,
+                  tuple(diffusion.style_bank.shape))
 
     train(
         diffusion,
