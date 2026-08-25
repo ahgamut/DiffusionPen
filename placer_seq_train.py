@@ -31,16 +31,19 @@ def gaussian_nll(target, mu, logvar):
     return 0.5 * (logvar + (target - mu) ** 2 * torch.exp(-logvar))
 
 
-def run_batch(batch, placer, tokenizer, text_encoder, args):
+def run_batch(batch, placer, tokenizer, text_encoder, style_bank, args):
     device = args.device
     text_feats, lengths = sequence_text_features(
         batch["texts"], tokenizer, text_encoder, device
     )
     writer_ids = batch["writer_ids"].to(device)
+    # Writer conditioning = the frozen style-bank vector, looked up the same way
+    # inference does (style-only placer). style_bank is [W, style_dim] on device.
+    style_vec = style_bank[writer_ids]
     ink = batch["ink"].to(device)
     after_punct = batch["after_punct"].to(device)
     mu_gap, logvar_gap, mu_base, logvar_base = placer(
-        text_feats, writer_ids, ink, after_punct=after_punct, lengths=lengths
+        text_feats, style_vec, ink, after_punct=after_punct, lengths=lengths
     )
 
     mask = batch["trans_mask"].to(device)
@@ -68,11 +71,11 @@ def populate_stat_buffers(placer, stats):
     print("populated placer stat buffers from dataset")
 
 
-def train_epoch(placer, tokenizer, text_encoder, optimizer, loader, meter, args):
+def train_epoch(placer, tokenizer, text_encoder, optimizer, loader, meter, style_bank, args):
     placer.train()
     meter.reset()
     for batch in loader:
-        loss = run_batch(batch, placer, tokenizer, text_encoder, args)
+        loss = run_batch(batch, placer, tokenizer, text_encoder, style_bank, args)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -80,12 +83,12 @@ def train_epoch(placer, tokenizer, text_encoder, optimizer, loader, meter, args)
     print("train", repr(meter))
 
 
-def val_epoch(placer, tokenizer, text_encoder, loader, meter, args):
+def val_epoch(placer, tokenizer, text_encoder, loader, meter, style_bank, args):
     placer.eval()
     meter.reset()
     with torch.no_grad():
         for batch in loader:
-            loss = run_batch(batch, placer, tokenizer, text_encoder, args)
+            loss = run_batch(batch, placer, tokenizer, text_encoder, style_bank, args)
             meter.update(loss.item(), int(batch["lengths"].numel()))
     print("validation", repr(meter))
 
@@ -115,6 +118,28 @@ def main():
     dset = IAMSequenceDataset(writers_dir=args.data_dir)
     train_loader, test_loader = get_loaders(dset, args.batch_size)
 
+    # Writer conditioning is the frozen style bank (style-only placer): the same
+    # [W, style_dim] tensor inference loads, so a single --writer-id means the
+    # same style to both. Required here (no trained per-writer embedding anymore).
+    bank_path = args.style_bank_path
+    if not os.path.isfile(bank_path):
+        raise FileNotFoundError(
+            "placer training needs the style bank at {} -- build it with "
+            "utils/build_style_bank.py against --data-dir (same --style-name as the "
+            "deployed model).".format(bank_path)
+        )
+    style_bank = torch.load(bank_path, map_location=args.device, weights_only=True)
+    if style_bank.shape[0] != num_writers:
+        raise ValueError(
+            "style bank writer count {} != W {}; the bank must be built from the "
+            "same merged split as writers_global.json".format(
+                style_bank.shape[0], num_writers
+            )
+        )
+    style_bank = style_bank.to(args.device)
+    style_dim = int(style_bank.shape[1])
+    print("loaded style bank", bank_path, tuple(style_bank.shape))
+
     if args.dataparallel:
         device_ids = [3, 4]
     else:
@@ -127,7 +152,7 @@ def main():
     text_encoder = text_encoder.to(args.device)
     frz(text_encoder)
 
-    placer = WordPlacer(num_writers=num_writers)
+    placer = WordPlacer(num_writers=num_writers, style_dim=style_dim)
     placer = DataParallel(placer, device_ids=device_ids)
     placer = placer.to(args.device)
     # Seed the stat buffers from the dataset before any (optional) checkpoint
@@ -149,10 +174,13 @@ def main():
     for epoch in range(args.epochs):
         print("Epoch:", epoch)
         train_epoch(
-            placer, tokenizer, text_encoder, optimizer, train_loader, train_meter, args
+            placer, tokenizer, text_encoder, optimizer, train_loader, train_meter,
+            style_bank, args,
         )
         if epoch % 10 == 0:
-            val_epoch(placer, tokenizer, text_encoder, test_loader, val_meter, args)
+            val_epoch(
+                placer, tokenizer, text_encoder, test_loader, val_meter, style_bank, args
+            )
             torch.save(placer.state_dict(), ckpt_path)
             torch.save(optimizer.state_dict(), optim_path)
 

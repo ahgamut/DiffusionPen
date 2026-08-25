@@ -56,8 +56,9 @@ def load_writer_index(writers_dir=DEFAULT_WRITERS_DIR):
 
 def load_num_writers(writers_dir=DEFAULT_WRITERS_DIR):
     """Global writer count ``W`` from the merged split's registry. Sizes the
-    placer's ``writer_emb`` + per-writer ``line_advance`` buffer so its id space
-    matches the style bank (only IAM rows are trained; see load_writer_index)."""
+    placer's per-writer ``line_advance`` buffer and indexes the frozen style bank
+    (style-only conditioning) so its id space matches the style bank at inference
+    (only IAM writers appear in the paragraph data; see load_writer_index)."""
     with open(os.path.join(writers_dir, WRITERS_GLOBAL), "r") as f:
         return int(json.load(f)["n_writers"])
 

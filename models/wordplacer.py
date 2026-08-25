@@ -22,7 +22,9 @@ class WordPlacer(nn.Module):
 
     ``forward`` inputs (position ``t`` is the transition prev=t-1 -> cur=t):
       - ``text_feats``   [B, T, text_dim]  frozen CANINE pooled embedding per word
-      - ``writer_ids``   [B] or [B, T]     IAM style-class index (0..num_writers-1)
+      - ``style_vec``    [B, style_dim] or [B, T, style_dim]  frozen per-writer
+                                            style-bank vector (same space the
+                                            diffusion UNet consumes)
       - ``ink_dims``     [B, T, 2]          normalized (ink_w, ink_h) per word
       - ``after_punct``  [B, T]             1 if prev word ended with punctuation
       - ``lengths``      unused (kept for call-site compatibility)
@@ -40,6 +42,7 @@ class WordPlacer(nn.Module):
     def __init__(
         self,
         num_writers=339,
+        style_dim=1280,
         text_dim=768,
         text_reduced=64,
         writer_dim=32,
@@ -52,8 +55,12 @@ class WordPlacer(nn.Module):
     ):
         super().__init__()
         self.text_reduce = nn.Linear(text_dim, text_reduced)
-        self.writer_emb = nn.Embedding(num_writers, writer_dim)
-        # input = writer_emb + reduced(prev) + reduced(cur) + ink(prev,2)
+        # Writer conditioning is a projection of the frozen style-bank vector
+        # (style-only redesign), NOT a per-writer embedding: learns a shared
+        # style->placement map that also serves writers with a bank row but no
+        # paragraph data (CVL/CSAFE), and regularizes vs. the old lookup table.
+        self.style_proj = nn.Sequential(nn.Linear(style_dim, writer_dim), nn.ReLU())
+        # input = writer_feat + reduced(prev) + reduced(cur) + ink(prev,2)
         #         + ink(cur,2) + after_punct(1)
         input_dim = writer_dim + 2 * text_reduced + 2 + 2 + 1
         self.net = nn.Sequential(
@@ -80,7 +87,7 @@ class WordPlacer(nn.Module):
         prev[:, 1:] = x[:, :-1]
         return prev
 
-    def forward(self, text_feats, writer_ids, ink_dims, after_punct=None, lengths=None):
+    def forward(self, text_feats, style_vec, ink_dims, after_punct=None, lengths=None):
         b, t, _ = text_feats.shape
         if after_punct is None:
             after_punct = torch.zeros((b, t), device=text_feats.device)
@@ -89,8 +96,8 @@ class WordPlacer(nn.Module):
         tred_prev = self._shift_prev(tred_cur)
         ink_prev = self._shift_prev(ink_dims)
 
-        wemb = self.writer_emb(writer_ids)
-        if wemb.dim() == 2:  # one writer per sequence -> broadcast over time
+        wemb = self.style_proj(style_vec)
+        if wemb.dim() == 2:  # one style vector per sequence -> broadcast over time
             wemb = wemb.unsqueeze(1).expand(-1, t, -1)
 
         x = torch.cat(

@@ -300,6 +300,8 @@ def place_words_learned(
     placer = models["placer"]
     tokenizer = models["tokenizer"]
     text_encoder = models["text_encoder"]
+    diffusion = models["diffusion"]
+    core = getattr(placer, "module", placer)
 
     n = len(fakes)
     if n == 0:
@@ -319,12 +321,21 @@ def place_words_learned(
         ink[0, i, 1] = im.height / H
         if i > 0 and str(words[i - 1]) and str(words[i - 1])[-1] in PUNCTUATION:
             after_punct[0, i] = 1.0
-    writer_ids = torch.tensor([writer_id], dtype=torch.long, device=device)
+
+    # Writer conditioning = the frozen style-bank vector (style-only placer), the
+    # same [W, style_dim] tensor the diffusion UNet consumes. A writer with no
+    # bank row falls back to zeros -> style_proj bias -> default spacing.
+    style_dim = core.style_proj[0].in_features
+    bank = getattr(diffusion, "style_bank", None)
+    if bank is not None and 0 <= writer_id < bank.shape[0]:
+        style_vec = bank[writer_id].to(device).unsqueeze(0)
+    else:
+        style_vec = torch.zeros((1, style_dim), device=device)
 
     placer.eval()
     with torch.no_grad():
         mu_gap, logvar_gap, mu_base, logvar_base = placer(
-            text_feats, writer_ids, ink, after_punct=after_punct
+            text_feats, style_vec, ink, after_punct=after_punct
         )
 
     # Sample gap/base ~ N(mu, exp(logvar)) on CPU with a seedable generator.
@@ -341,7 +352,6 @@ def place_words_learned(
     gap = sample(mu_gap, logvar_gap, *gap_clamp)
     base = sample(mu_base, logvar_base, *base_clamp)
 
-    core = getattr(placer, "module", placer)
     advance = core.line_advance
     n_writers = advance.shape[0]
     wa = float(advance[writer_id]) if 0 <= writer_id < n_writers else 4.0

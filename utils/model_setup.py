@@ -153,10 +153,29 @@ def load_models(args):
     placer_path = getattr(args, "placer_path", None)
     if placer_path and os.path.isfile(placer_path):
         placer_sd = torch.load(placer_path, map_location=args.device, weights_only=True)
-        # Size the placer to its own checkpoint's writer space (may differ from
-        # the UNet's -- the placer trains on IAM-only paragraph data).
-        placer_writers = _embedding_rows(placer_sd, "writer_emb.weight") or style_classes
-        placer = WordPlacer(num_writers=placer_writers)
+        # Size the placer from its own checkpoint: writer count from the
+        # line_advance buffer (per-writer, may differ from the UNet's -- placer
+        # trains on IAM-only paragraph data), style_dim from the style_proj
+        # input (style-only conditioning; there is no writer_emb anymore).
+        placer_writers = _embedding_rows(placer_sd, "line_advance") or style_classes
+        style_proj_w = next(
+            (v for k, v in placer_sd.items() if k.endswith("style_proj.0.weight")), None
+        )
+        placer_style_dim = int(style_proj_w.shape[1]) if style_proj_w is not None else 1280
+        # Fail loud if the loaded bank's feature dim disagrees with the placer's
+        # (wrong --style-name: the placer and the bank must share one encoder).
+        if (
+            diffusion.style_bank is not None
+            and diffusion.style_bank.shape[1] != placer_style_dim
+        ):
+            raise ValueError(
+                "style bank feature dim {} != placer style_dim {}; the placer was "
+                "trained against a bank from a different --style-name -- rebuild the "
+                "bank / retrain the placer with the matching encoder".format(
+                    diffusion.style_bank.shape[1], placer_style_dim
+                )
+            )
+        placer = WordPlacer(num_writers=placer_writers, style_dim=placer_style_dim)
         placer = DataParallel(placer, device_ids=device_ids)
         placer.load_state_dict(placer_sd)
         placer = placer.to(args.device)
