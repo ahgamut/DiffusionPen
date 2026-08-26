@@ -1,4 +1,3 @@
-import glob
 import sys
 import json
 import traceback
@@ -16,7 +15,12 @@ from utils.generation import (
     build_replaced_paragraph,
 )
 from utils.arghandle import add_common_args, file_check
-from utils.subprompt import Prompt as XMLPrompt
+from utils.page_prompt import (
+    collect_prompt_files,
+    load_page_prompt,
+    WriterIndex,
+    DEFAULT_ROOT,
+)
 from utils.gen_cli import init_generation, read_words
 
 
@@ -38,19 +42,36 @@ def build_ref_paragraph(fakes, xpr, max_line_width, longest_word_length):
     return xpr.get_cropped(dupe)
 
 
-def load_prompt(coll):
-    xpr = None
-    fname = None
-    try:
-        fname = random.choice(coll)
-        xpr = XMLPrompt(fname)
-        assert xpr.writer_id in IAM_TempLoader.wr_dict
-    except Exception:
-        print(f"failed to read {fname}")
-        tb = traceback.format_tb(sys.exc_info()[2])
-        print("".join(tb))
-        xpr = None
-    return xpr
+def pick_prompt(files, dataset, data_root):
+    """Load a random valid prompt for the dataset (retry on parse failures)."""
+    for _ in range(len(files)):
+        path = random.choice(files)
+        try:
+            xpr = load_page_prompt(dataset, path, data_root)
+        except Exception:
+            print("failed to read", path)
+            print("".join(traceback.format_tb(sys.exc_info()[2])))
+            xpr = None
+        if xpr is not None:
+            return xpr
+    raise RuntimeError("no loadable prompts under " + data_root)
+
+
+def make_writer_resolver(args):
+    """raw writer -> style-bank row. With --writers-global, use the merged
+    split's global writer ids (index the merged style bank); otherwise fall back
+    to the IAM-only IAM_TempLoader (legacy IAM-339 bank), which cannot serve
+    CVL/CSAFE."""
+    if args.writers_global:
+        widx = WriterIndex(args.writers_global)
+        return lambda raw: widx.index(args.dataset, raw)
+    if args.dataset == "iam":
+        IAM_TempLoader.check_preload()
+        return lambda raw: IAM_TempLoader.map_wid_to_index(raw)
+    raise RuntimeError(
+        "--dataset {} requires --writers-global (map the writer to its global id "
+        "in the merged style bank)".format(args.dataset)
+    )
 
 
 def choose_replacements(xpr, args, mapping):
@@ -79,7 +100,7 @@ def choose_replacements(xpr, args, mapping):
 
 
 def do_replacement(xpr, raw_orig, s, args, m, mapping):
-    """Composite K generated word-swaps onto the real form and return the image
+    """Composite K generated word-swaps onto the real page and return the image
     (or None when there is nothing eligible to replace)."""
     idxs, texts = choose_replacements(xpr, args, mapping)
     if not idxs:
@@ -144,6 +165,17 @@ def main():
     parser.add_argument("-o", "--output", type=str, default="./outputs/")
     parser.add_argument("--alt-text", default="./prompts/sample.txt", help="alt text")
     parser.add_argument(
+        "--data-root", default=None,
+        help="root of the raw pages+xml for --dataset (default: "
+        "./iam_data, ./cvl_data, ./csafe_data)",
+    )
+    parser.add_argument(
+        "--writers-global", default=None,
+        help="writers_global.json of the merged split the style bank was built "
+        "from; maps the page's writer to its global style-bank row (required for "
+        "cvl/csafe)",
+    )
+    parser.add_argument(
         "--replace-k", type=int, default=0,
         help="randomly replace K real words with generated crops in place "
         "(0 = disabled, run the original full-regen variants instead)",
@@ -161,23 +193,31 @@ def main():
     add_common_args(parser)
 
     args, m = init_generation(parser, __file__)
-    IAM_TempLoader.check_preload()
+
+    # --dataset (from add_common_args) selects the page-prompt loader here.
+    args.dataset = args.dataset.lower()
+    if args.dataset not in DEFAULT_ROOT:
+        raise RuntimeError(
+            "--dataset must be one of {} for regen_prompts".format(list(DEFAULT_ROOT))
+        )
 
     if args.replace_mode == "json" and args.replace_json is None:
         raise RuntimeError("--replace-mode json requires --replace-json")
     mapping = json.load(open(args.replace_json)) if args.replace_json else {}
 
-    coll_xmls = list(glob.glob("./iam_data/xml/*.xml"))
+    data_root = args.data_root or DEFAULT_ROOT[args.dataset]
+    resolve_writer = make_writer_resolver(args)
+    files = collect_prompt_files(args.dataset, data_root)
+    if not files:
+        raise RuntimeError(f"no prompt files for {args.dataset} under {data_root}")
     alt_words = read_words(args.alt_text)
 
     for i in range(args.num_prompts):
         try:
-            xpr = load_prompt(coll_xmls)
-            while xpr is None:
-                xpr = load_prompt(coll_xmls)
-            raw_orig = Image.open(os.path.join("./iam_data", "forms", xpr.idd + ".png"))
+            xpr = pick_prompt(files, args.dataset, data_root)
+            raw_orig = Image.open(xpr.page_path)
             raw_crop = xpr.get_cropped(raw_orig)
-            s = IAM_TempLoader.map_wid_to_index(xpr.writer_id)
+            s = resolve_writer(xpr.writer_id)
 
             rid = "%04x" % random.randint(0, 1000)
             raw_crop.save(os.path.join(args.output, f"{xpr.idd}_orig.png"))
