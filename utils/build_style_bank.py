@@ -78,6 +78,28 @@ def encode_mean(indices, dataset, enc, args):
     return total / count
 
 
+def build_feature_cache(dataset, enc, args):
+    """Encode every crop in ``dataset`` through the frozen extractor once into a
+    single ``[N, feat]`` tensor (on ``args.device``). Shared by the writer-
+    discriminator train/benchmark scripts so their sampling loops do no repeated
+    CNN passes -- the eval analogue of train.py's style-feature cache."""
+    n = len(dataset)
+    feats = None
+    with torch.no_grad():
+        for start in range(0, n, args.batch_size):
+            chunk = range(start, min(start + args.batch_size, n))
+            batch = torch.stack(
+                [dataset.transforms(dataset._img(i)) for i in chunk]
+            ).to(args.device)
+            out = enc(batch)
+            if feats is None:
+                feats = torch.empty(n, out.shape[1], device=args.device)
+            feats[start:start + out.shape[0]] = out
+            if start % (args.batch_size * 25) == 0:
+                print("feature cache {}/{}".format(start, n))
+    return feats
+
+
 def main():
     parser = argparse.ArgumentParser("build-style-bank")
     parser.add_argument(
