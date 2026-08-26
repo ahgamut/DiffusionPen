@@ -401,6 +401,31 @@ def stack_images(images, margin=0, background="white"):
     return dst
 
 
+def build_replaced_paragraph(raw_orig, xpr, gen_crops, replace_indices):
+    """Composite generated word crops over selected bboxes of a real IAM form.
+
+    Starts from the real form image (real ink everywhere) and, for each index in
+    ``replace_indices``, white-fills that word's XML bbox and pastes the matching
+    generated crop scaled to the bbox height (same scaling as the exact-position
+    ``build_ref_paragraph``). Every other word keeps its original real ink.
+    Returns the paragraph region as a grayscale image.
+
+    ``gen_crops`` is aligned 1:1 with ``replace_indices``.
+    """
+    assert len(gen_crops) == len(replace_indices)
+    dupe = raw_orig.convert("RGB")
+    for fake, i in zip(gen_crops, replace_indices):
+        word = xpr.words[i]
+        # clear the original ink under this word, then drop the generated crop in
+        dupe.paste((255, 255, 255), (word.x_start, word.y_start, word.x_end, word.y_end))
+        ratio = word.height / max(fake.height, 1)
+        scaled_width = max(int(fake.width * ratio), 3)
+        scaled_height = max(word.height, 3)
+        scaled_img = fake.resize((scaled_width, scaled_height), Image.LANCZOS)
+        dupe.paste(scaled_img, (word.x_start, word.y_start))
+    return xpr.get_cropped(dupe.convert("L"))
+
+
 #####
 # using the model
 #####
