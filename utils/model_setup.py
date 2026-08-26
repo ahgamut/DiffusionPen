@@ -77,15 +77,25 @@ def load_models(args):
         bank_path = getattr(args, "style_bank_path", None)
         if bank_path and os.path.isfile(bank_path):
             bank = torch.load(bank_path, map_location=args.device, weights_only=True)
-            # Fail loud on a bank that does not match this checkpoint.
+            # Fail loud on a bank that does not match this checkpoint, unless the
+            # caller opted in to a size-mismatched bank (--allow-bank-mismatch),
+            # e.g. one built from a held-out/external split. Writer identity at
+            # inference is bank-only (unet's label_emb branch is dead) and
+            # get_style_coll range-checks --writer-id against the bank's own row
+            # count, so a differing writer count is safe there -- the strict guard
+            # only exists to catch an accidentally stale bank.
             if bank.shape[0] != style_classes:
-                raise ValueError(
+                msg = (
                     "style bank writer count {} != model writer count {} ({}); the "
                     "bank was built from a different split -- rebuild it with "
                     "utils/build_style_bank.py against the training --data-dir".format(
                         bank.shape[0], style_classes, bank_path
                     )
                 )
+                if getattr(args, "allow_bank_mismatch", False):
+                    print("WARNING (--allow-bank-mismatch):", msg)
+                else:
+                    raise ValueError(msg)
             slin = next(
                 (v for k, v in unet_sd.items() if k.endswith("style_lin.weight")),
                 None,

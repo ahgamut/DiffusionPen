@@ -82,8 +82,15 @@ def add_common_args(parser):
     parser.add_argument(
         "--style-bank-path", type=str, default="./saved_iam_data/style_bank.pt"
     )
+    # Opt-in escape for generating from a style bank whose writer count differs
+    # from the trained checkpoint (e.g. a bank built from a held-out/external
+    # split). Off by default so a stale/mismatched bank still fails loud.
+    parser.add_argument(
+        "--allow-bank-mismatch", dest="allow_bank_mismatch", action="store_true"
+    )
 
     parser.set_defaults(
+        allow_bank_mismatch=False,
         color=True,
         latent=True,
         img_feat=True,
