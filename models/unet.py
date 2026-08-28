@@ -1143,6 +1143,22 @@ class UNetModel(nn.Module):
         self.middle_block.apply(convert_module_to_f32)
         self.output_blocks.apply(convert_module_to_f32)
 
+    def _perturb_features(self, y):
+        """Magnitude-preserving sparse jitter of a pooled conditioning vector.
+
+        Adds scale-0.25 Gaussian noise to ~20% of the dims (Bernoulli mask), then
+        renormalizes back to the original norm — so only the *direction* moves, not
+        the signal strength. Generic over a [B, feat] pooled vector (style today,
+        applicable to text as well). Gated by the caller.
+        """
+        magn = torch.norm(y, dim=1, keepdim=True)
+        noise = torch.randn_like(y) * 0.25
+        # bernoulli mask: perturb only ~20% of dims
+        noise = noise * torch.bernoulli(torch.ones_like(noise) * 0.2)
+        y = y + noise
+        y = magn * y / torch.norm(y, dim=1, keepdim=True)
+        return y
+
     def forward(
         self,
         x,
@@ -1194,15 +1210,9 @@ class UNetModel(nn.Module):
             y = y.reshape(b, 5, -1)
             y = torch.mean(y, dim=1)
 
-            noise = False
-            if noise == True:
-                magn = torch.norm(y, dim=1, keepdim=True)
-                noise = torch.randn_like(y) * 0.25
-                # bernoulli mask in noise
-                noise = noise * torch.bernoulli(torch.ones_like(noise) * 0.2)
-
-                y = y + noise
-                y = magn * y / torch.norm(y, dim=1, keepdim=True)
+            perturb = False
+            if perturb:
+                y = self._perturb_features(y)
 
             y = self.style_lin(y)
 
