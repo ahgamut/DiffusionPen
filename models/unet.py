@@ -1223,10 +1223,12 @@ class UNetModel(nn.Module):
 
         if context is not None:
 
-            context = self.text_encoder(**context).last_hidden_state  # .to(x.device)
+            if not torch.is_tensor(context):
+                context = self.text_encoder(**context).last_hidden_state  # .to(x.device)
 
-            if self.cont_dim == 320:
-                context = self.text_lin(context)  # .unsqueeze(1)
+                if self.cont_dim == 320:
+                    context = self.text_lin(context)  # .unsqueeze(1)
+            # else: precomputed [B,seq,cont_dim] context (DOG neg rep) -> use as-is
 
         h = x.type(self.dtype)
         context = context.to(h.device)

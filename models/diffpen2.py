@@ -91,23 +91,10 @@ class Diffusion:
             x = torch.randn((n, 3, self.img_size[0], self.img_size[1])).to(args.device)
         return x
 
-    def _dog_guidance(self, eps_p, eps_n, t, g_s=0.0, u_T=700, tau=1.0, total_T=None):
-        """Dual Orthogonal Guidance (Nikolaidou et al. 2025, arXiv:2508.17017).
-
-        Test-time only. Combine the positive noise prediction ``eps_p`` (clean
-        condition) with a negative one ``eps_n`` (corrupted condition) by steering
-        along the component of ``eps_n`` orthogonal to ``eps_p``, on a triangular
-        timestep schedule. All reductions are per-sample (batch dim 0 kept).
-
-          eps* = eps_n - proj_{eps_p}(eps_n)            (Eq. 6, 12)
-          g(t) = g_s * gamma(t)   [triangular, peak u_T] (Eq. 10, 11)
-          eps^ = eps_p + g(t) * (eps_p - eps*)          (Eq. 9)
-
-        ``g_s = 0`` disables it (returns ``eps_p`` unchanged) -- the default for now.
-        ``t`` is the scalar timestep on the [0, total_T] scale (total_T defaults to
-        ``self.noise_steps``). Caller must supply ``eps_n`` from a second forward
-        pass on the perturbed condition -- not wired yet.
-        """
+    def _dog_guidance(self, eps_p, eps_n, t, g_s=0.0, u_T=700, tau=0.0, total_T=None):
+        """DOG guidance (arXiv:2508.17017): eps^ = eps_p + g(t)*(eps_p - eps*),
+        eps* = eps_n - proj_{eps_p}(eps_n), g(t) triangular in t (peak u_T).
+        Per-sample; g_s=0 is a no-op; tau<=0 skips the negative norm-clip."""
         if g_s == 0:
             return eps_p
         if total_T is None:
@@ -115,17 +102,47 @@ class Diffusion:
         b = eps_p.shape[0]
         flat_p = eps_p.reshape(b, -1)
         flat_n = eps_n.reshape(b, -1)
-        # norm-clip the negative prediction per sample (Eq. 8)
-        scale = torch.clamp(tau / (flat_n.norm(dim=1, keepdim=True) + 1e-12), max=1.0)
-        flat_n = flat_n * scale
-        # orthogonal component of eps_n w.r.t. eps_p, per sample (Eq. 6, 12)
+        if tau and tau > 0:  # optional per-sample norm-clip (Eq. 8)
+            scale = torch.clamp(tau / (flat_n.norm(dim=1, keepdim=True) + 1e-12), max=1.0)
+            flat_n = flat_n * scale
         denom = (flat_p * flat_p).sum(dim=1, keepdim=True) + 1e-12
         coef = (flat_n * flat_p).sum(dim=1, keepdim=True) / denom
         eps_star = (flat_n - coef * flat_p).reshape_as(eps_p)
-        # triangular guidance schedule (Eq. 10, 11)
         gamma = (t / u_T) if t <= u_T else (1.0 - (t - u_T) / (total_T - u_T))
         g = g_s * float(gamma)
         return eps_p + g * (eps_p - eps_star)
+
+    @staticmethod
+    def _masked_noise(shape, lam, p, device):
+        """DOG negative rep r~ = lam * eta * N(0,I), eta ~ Bernoulli(p) (Eq. 4)."""
+        mask = torch.bernoulli(torch.full(shape, float(p), device=device))
+        return lam * mask * torch.randn(shape, device=device)
+
+    def _dog_negative_params(self, args, n, model, model_params):
+        """Negative-condition kwargs: swap style/text rep for masked noise per
+        --dog-neg (both|style|text); other kwargs unchanged. Fresh each call."""
+        device = args.device
+        p = getattr(args, "dog_keep_prob", 0.75)
+        which = getattr(args, "dog_neg", "both")
+        neg = dict(model_params)
+        sf = model_params.get("style_extractor")
+        if sf is not None and which in ("both", "style"):
+            feat = sf.shape[-1]
+            lam_s = getattr(args, "dog_lambda_s", 1000.0)
+            rs = self._masked_noise((n, feat), lam_s, p, device)
+            # tile to [n*5, feat]; UNet reshape(b,5,-1).mean returns rs
+            neg["style_extractor"] = (
+                rs.unsqueeze(1).expand(n, 5, feat).reshape(n * 5, feat)
+            )
+        ctx = model_params.get("context")
+        if ctx is not None and which in ("both", "text"):
+            lam_t = getattr(args, "dog_lambda_t", 1000.0)
+            seq = ctx["input_ids"].shape[1]
+            core = getattr(model, "module", model)  # unwrap DataParallel
+            cont_dim = getattr(core, "cont_dim", 768)
+            # [n,seq,cont_dim] fed directly (forward bypasses the encoder)
+            neg["context"] = self._masked_noise((n, seq, cont_dim), lam_t, p, device)
+        return neg
 
     def update_schedule_x(
         self,
@@ -136,15 +153,26 @@ class Diffusion:
         model,
         model_params,
     ):
+        g_s = getattr(args, "dog_gs", 0.0)
+        u_T = getattr(args, "dog_ut", 700)
+        tau = getattr(args, "dog_tau", 0.0)
         noise_scheduler.set_timesteps(50)
         for time in noise_scheduler.timesteps:
             t_item = time.item()
             t = (torch.ones(n) * t_item).long().to(args.device)
-            noisy_residual = model(
+            eps_p = model(
                 x,
                 timesteps=t,
                 **model_params,
             )
+            if g_s > 0:  # DOG: negative pass + orthogonal guidance
+                neg_params = self._dog_negative_params(args, n, model, model_params)
+                eps_n = model(x, timesteps=t, **neg_params)
+                noisy_residual = self._dog_guidance(
+                    eps_p, eps_n, t_item, g_s=g_s, u_T=u_T, tau=tau
+                )
+            else:
+                noisy_residual = eps_p
             prev_noisy_sample = noise_scheduler.step(
                 noisy_residual, time, x
             ).prev_sample

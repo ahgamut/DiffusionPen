@@ -89,6 +89,26 @@ def add_common_args(parser):
         "--allow-bank-mismatch", dest="allow_bank_mismatch", action="store_true"
     )
 
+    # Dual Orthogonal Guidance (DOG), test-time sampling (arXiv:2508.17017).
+    # Off by default (--dog-gs 0): a single conditional pass, identical to before.
+    # --dog-gs > 0 enables a second (negative) pass + orthogonal guidance.
+    parser.add_argument("--dog-gs", type=float, default=0.0,
+                        help="DOG base guidance scale g_s (0 = off; paper best ~20)")
+    parser.add_argument("--dog-ut", type=int, default=700,
+                        help="DOG triangular-schedule peak timestep u_T")
+    parser.add_argument("--dog-tau", type=float, default=0.0,
+                        help="DOG negative-prediction L2 norm-clip (0 = off; scale "
+                             "to the latent eps norm ~O(30), not ~1)")
+    parser.add_argument("--dog-keep-prob", type=float, default=0.75,
+                        help="DOG dropout keep-probability p for the negative rep")
+    parser.add_argument("--dog-lambda-s", type=float, default=1000.0,
+                        help="DOG negative-style noise magnitude lambda_s")
+    parser.add_argument("--dog-lambda-t", type=float, default=1000.0,
+                        help="DOG negative-text noise magnitude lambda_t")
+    parser.add_argument("--dog-neg", type=str, default="both",
+                        choices=["both", "style", "text"],
+                        help="which condition(s) DOG corrupts for the negative pass")
+
     parser.set_defaults(
         allow_bank_mismatch=False,
         color=True,
