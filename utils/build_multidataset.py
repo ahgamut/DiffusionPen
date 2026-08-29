@@ -11,6 +11,9 @@ ship in different on-disk shapes:
 - **CSAFE** -- flat ``w<wid>_..._.png`` pages + Pascal-VOC ``.xml`` (no pre-cut
               crops): each ``<object status="accepted">`` is cropped from the page
               by its ``<bndbox>``; writer is the 4 digits after the leading ``w``.
+- **FONT**  -- optional synthetic writers (``--datasets ...,font --font-dir DIR``):
+              one writer per font file, words PIL-rendered + augmented for glyph
+              coverage (no ``--input`` subdir). See ``utils/font_synth.py``.
 
 Output is a single stage-4 memmap split dir (see ``utils/memmap_dataset.py``):
 ``images.npy`` + ``meta.msgpack`` + ``index.msgpack`` + ``manifest.json``, plus a
@@ -37,11 +40,13 @@ import xml.etree.ElementTree as ET
 
 from PIL import Image, ImageOps
 
+from utils import font_synth
 from utils.auxiliary_functions import centered_PIL, image_resize_PIL
 from utils.memmap_dataset import MemmapWriter
 
 IMG_H, IMG_W = 64, 256
-# subdir name under --input for each dataset key
+# subdir name under --input for each dataset key. "font" is a fourth dataset that
+# takes no --input subdir (crops are PIL-rendered, see utils/font_synth.py).
 DATASET_DIRS = {"iam": "IAM", "cvl": "CVL", "csafe": "CSAFE"}
 
 
@@ -249,9 +254,13 @@ ADAPTERS = {"iam": iam_records, "cvl": cvl_records, "csafe": csafe_records}
 # --------------------------------------------------------------------------- #
 def load_crop(ref, page_cache):
     """Materialize a record's raw crop as a PIL image. CSAFE pages are cached
-    (records are page-contiguous, so a single-entry cache opens each page once)."""
+    (records are page-contiguous, so a single-entry cache opens each page once);
+    synthetic font crops are rendered on the fly from their stored params."""
     if ref[0] == "crop":
         return Image.open(ref[1])
+    if ref[0] == "font":
+        _, font_path, text, params = ref
+        return font_synth.render_and_augment(font_path, text, params)
     _, page_path, box = ref
     page = page_cache.get(page_path)
     if page is None:
@@ -264,11 +273,14 @@ def load_crop(ref, page_cache):
     return page.crop(box)
 
 
-def build(input_root, split_name, out_root, out_name, datasets, iam_keep_nonok=False):
+def build(input_root, split_name, out_root, out_name, datasets,
+          iam_keep_nonok=False, font_dir=None, font_cfg=None):
     # ---- pass 1: enumerate + validate (no pixels loaded yet) -------------- #
     records = []
     stats = {}
     for key in datasets:
+        if key == "font":
+            continue  # appended last (needs the real records for coverage/color)
         sub = os.path.join(input_root, DATASET_DIRS[key])
         if not os.path.isdir(sub):
             print(f"[{key}] no {DATASET_DIRS[key]}/ under {input_root}; skipping")
@@ -282,8 +294,22 @@ def build(input_root, split_name, out_root, out_name, datasets, iam_keep_nonok=F
         print(f"[{key}] {len(recs)} records  (skips: {_fmt_stats(s)})")
         records.extend(recs)
 
+    # ---- synthetic font writers: one writer per font, rendered by PIL ----- #
+    # Runs last so font_synth can target the real corpus's rare glyph n-grams
+    # and match its ink/paper color; a crop_loader over the real refs is injected
+    # (font_synth stays decoupled from this module's ref grammar).
+    if "font" in datasets:
+        color_cache = {}
+
+        def _real_loader(rec):
+            return load_crop(rec["ref"], color_cache)
+
+        frecs = font_synth.font_records(font_dir, records, _real_loader, font_cfg)
+        print(f"[font] {len(frecs)} records over {font_dir}")
+        records.extend(frecs)
+
     if not records:
-        raise SystemExit(f"no usable records found under {input_root}")
+        raise SystemExit("no usable records found")
 
     # ---- global, deterministic writer registry --------------------------- #
     keys = sorted({(r["dataset"], r["writer"]) for r in records})
@@ -366,31 +392,70 @@ def _fmt_stats(s):
 def main():
     p = argparse.ArgumentParser("build-multidataset")
     p.add_argument(
-        "--input", required=True,
-        help="folder containing IAM/ CVL/ CSAFE/ subdirs (like ./sample-fmt)",
+        "--input", default=None,
+        help="folder containing IAM/ CVL/ CSAFE/ subdirs (like ./sample-fmt); "
+        "not needed for a font-only build",
     )
     p.add_argument("--split-name", default="train", help="output split name suffix")
     p.add_argument("--out-root", default="./saved_iam_data")
     p.add_argument("--out-name", default="combined_word", help="output dir prefix")
     p.add_argument(
         "--datasets", default="iam,cvl,csafe",
-        help="comma-separated subset of {iam,cvl,csafe} to include",
+        help="comma-separated subset of {iam,cvl,csafe,font} to include",
     )
     p.add_argument(
         "--iam-keep-nonok", action="store_true",
         help="also keep IAM words from lines whose segmentation != 'ok' "
         "(their crops exist on disk; default drops them for quality)",
     )
+    # --- synthetic font-writer augmentation (utils/font_synth.py) --------- #
+    g = p.add_argument_group("font augmentation (used when 'font' is in --datasets)")
+    g.add_argument("--font-dir", default=None, help="dir of .ttf/.otf files (one writer each)")
+    g.add_argument("--font-word-source", default="wordfreq",
+                   help="'wordfreq' | 'nltk' | path to a newline wordlist")
+    g.add_argument("--font-words-per-writer", type=int, default=400)
+    g.add_argument("--font-instances-per-word", type=int, default=4,
+                   help="augmented renders per (writer, word)")
+    g.add_argument("--font-no-share-words", dest="font_share_words", action="store_false",
+                   help="sample a per-writer word subset instead of the shared target set")
+    g.add_argument("--font-no-ngram-fill", dest="font_ngram_fill", action="store_false",
+                   help="don't bias word choice toward rare real-corpus n-grams")
+    g.add_argument("--font-no-color-from-real", dest="font_color_from_real",
+                   action="store_false", help="use default ink/bg grayscale, not real-crop stats")
+    g.add_argument("--font-size-min", type=int, default=48)
+    g.add_argument("--font-size-max", type=int, default=64)
+    g.add_argument("--font-rotation-deg", type=float, default=5.0)
+    g.add_argument("--font-shear-deg", type=float, default=12.0)
+    g.add_argument("--font-seed", type=int, default=0)
     args = p.parse_args()
 
     datasets = [d.strip().lower() for d in args.datasets.split(",") if d.strip()]
-    bad = [d for d in datasets if d not in DATASET_DIRS]
+    allowed = set(DATASET_DIRS) | {"font"}
+    bad = [d for d in datasets if d not in allowed]
     if bad:
-        raise SystemExit(f"unknown dataset(s): {bad}; choose from {list(DATASET_DIRS)}")
+        raise SystemExit(f"unknown dataset(s): {bad}; choose from {sorted(allowed)}")
+    if any(d in DATASET_DIRS for d in datasets) and not args.input:
+        raise SystemExit("--input is required unless building font-only")
+    if "font" in datasets and not args.font_dir:
+        raise SystemExit("--font-dir is required when 'font' is in --datasets")
+
+    font_cfg = font_synth.FontSynthConfig(
+        word_source=args.font_word_source,
+        words_per_writer=args.font_words_per_writer,
+        instances_per_word=args.font_instances_per_word,
+        share_words=args.font_share_words,
+        ngram_fill=args.font_ngram_fill,
+        color_from_real=args.font_color_from_real,
+        size_min=args.font_size_min,
+        size_max=args.font_size_max,
+        rotation_deg=args.font_rotation_deg,
+        shear_deg=args.font_shear_deg,
+        seed=args.font_seed,
+    ) if "font" in datasets else None
 
     build(
         args.input, args.split_name, args.out_root, args.out_name, datasets,
-        iam_keep_nonok=args.iam_keep_nonok,
+        iam_keep_nonok=args.iam_keep_nonok, font_dir=args.font_dir, font_cfg=font_cfg,
     )
 
 
