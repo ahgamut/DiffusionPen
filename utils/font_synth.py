@@ -22,7 +22,7 @@ import math
 import os
 import string
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -348,7 +348,9 @@ def font_records(font_dir, real_records, crop_loader, cfg):
         if len(missing) > cfg.max_missing_lower:
             print(f"  [font] skip {writer}: missing lowercase {sorted(missing)}")
             continue
-        bad = font_missing_chars(font_path, string.ascii_uppercase + string.digits)
+        # per-word guard covers the font's missing lowercase (up to max_missing_lower
+        # may slip the font-level screen) plus any missing uppercase/digits.
+        bad = missing | font_missing_chars(font_path, string.ascii_uppercase + string.digits)
 
         ink_mean, bg_mean = _writer_color_means(stats, cfg, rng)
         if cfg.share_words:
