@@ -91,6 +91,42 @@ class Diffusion:
             x = torch.randn((n, 3, self.img_size[0], self.img_size[1])).to(args.device)
         return x
 
+    def _dog_guidance(self, eps_p, eps_n, t, g_s=0.0, u_T=700, tau=1.0, total_T=None):
+        """Dual Orthogonal Guidance (Nikolaidou et al. 2025, arXiv:2508.17017).
+
+        Test-time only. Combine the positive noise prediction ``eps_p`` (clean
+        condition) with a negative one ``eps_n`` (corrupted condition) by steering
+        along the component of ``eps_n`` orthogonal to ``eps_p``, on a triangular
+        timestep schedule. All reductions are per-sample (batch dim 0 kept).
+
+          eps* = eps_n - proj_{eps_p}(eps_n)            (Eq. 6, 12)
+          g(t) = g_s * gamma(t)   [triangular, peak u_T] (Eq. 10, 11)
+          eps^ = eps_p + g(t) * (eps_p - eps*)          (Eq. 9)
+
+        ``g_s = 0`` disables it (returns ``eps_p`` unchanged) -- the default for now.
+        ``t`` is the scalar timestep on the [0, total_T] scale (total_T defaults to
+        ``self.noise_steps``). Caller must supply ``eps_n`` from a second forward
+        pass on the perturbed condition -- not wired yet.
+        """
+        if g_s == 0:
+            return eps_p
+        if total_T is None:
+            total_T = self.noise_steps
+        b = eps_p.shape[0]
+        flat_p = eps_p.reshape(b, -1)
+        flat_n = eps_n.reshape(b, -1)
+        # norm-clip the negative prediction per sample (Eq. 8)
+        scale = torch.clamp(tau / (flat_n.norm(dim=1, keepdim=True) + 1e-12), max=1.0)
+        flat_n = flat_n * scale
+        # orthogonal component of eps_n w.r.t. eps_p, per sample (Eq. 6, 12)
+        denom = (flat_p * flat_p).sum(dim=1, keepdim=True) + 1e-12
+        coef = (flat_n * flat_p).sum(dim=1, keepdim=True) / denom
+        eps_star = (flat_n - coef * flat_p).reshape_as(eps_p)
+        # triangular guidance schedule (Eq. 10, 11)
+        gamma = (t / u_T) if t <= u_T else (1.0 - (t - u_T) / (total_T - u_T))
+        g = g_s * float(gamma)
+        return eps_p + g * (eps_p - eps_star)
+
     def update_schedule_x(
         self,
         args,
