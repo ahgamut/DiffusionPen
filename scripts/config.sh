@@ -21,6 +21,13 @@ export SPLIT_NAME="${SPLIT_NAME:-train}"
 # the two above by default; override DATA_DIR directly to point anywhere.
 export DATA_DIR="${DATA_DIR:-./saved_iam_data/${MERGED_SETNAME}_word_${SPLIT_NAME}}"
 
+# ---- font augmentation (synthetic writers; utils/font_synth.py) ----
+# Used by build_font_data.sh. Needs `pip install wordfreq`.
+export FONT_DIR="${FONT_DIR:-./sample-fmt/fonts}"                 # .ttf/.otf dir (one writer each)
+export FONT_DATASETS="${FONT_DATASETS:-csafe,font}"              # e.g. "csafe,font" or "font" (font-only)
+export FONT_WORDS_PER_WRITER="${FONT_WORDS_PER_WRITER:-400}"
+export FONT_INSTANCES_PER_WORD="${FONT_INSTANCES_PER_WORD:-4}"    # augmented renders per (writer, word)
+
 # ---- paths (match the argparse defaults; edit for your box) ----
 export SAVE_PATH="${SAVE_PATH:-./diffusionpen_iam_model_path}"
 export STYLE_PATH="${STYLE_PATH:-./style_models/iam_style_diffusionpen.pth}"

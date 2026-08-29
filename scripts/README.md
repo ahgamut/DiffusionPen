@@ -10,6 +10,7 @@ resources and then `exec` the local script, so the actual command lives in one p
 | Task | Local | SLURM | GPU |
 |------|-------|-------|-----|
 | Build memmap datasets (stage 4) | `local/build_data.sh` | `slurm/build_data.sbatch` | no |
+| Build font-augmented split | `local/build_font_data.sh` | `slurm/build_font_data.sbatch` | no |
 | Build style bank (stage 3) | `local/build_style_bank.sh` | `slurm/build_style_bank.sbatch` | yes |
 | Pre-train style encoder | `local/train_style_encoder.sh` | `slurm/train_style_encoder.sbatch` | yes |
 | Train diffusion model | `local/train_diffusion.sh` | `slurm/train_diffusion.sbatch` | yes |
@@ -40,6 +41,9 @@ scripts/local/train_diffusion.sh --load-check           # extra flag pass-throug
 pip install msgpack                                      # stage-4 format dep
 
 MULTIDATA_INPUT=./sample-fmt scripts/local/build_multidataset.sh   # -> saved_iam_data/combined_word_train/ (the training data)
+# optional: fold in synthetic font writers for glyph/OOV coverage (needs `pip install wordfreq`):
+# FONT_DATASETS=csafe,font scripts/local/build_font_data.sh        # real data + one writer per sample-fmt/fonts/*.ttf
+# then RE-TRAIN the style encoder on the new split + rebuild its cache/bank before train_diffusion.sh
 scripts/local/build_data.sh                              # -> saved_iam_data/iam_placer/ (placer only)
 scripts/local/build_style_bank.sh                        # -> saved_iam_data/style_bank.pt  (rebuild to W writers)
 scripts/local/train_diffusion.sh                         # -> $SAVE_PATH/models/{ckpt,ema_ckpt}.pt
