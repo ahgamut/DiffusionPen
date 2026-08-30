@@ -79,13 +79,14 @@ def choose_replacements(xpr, args, mapping):
 
     ``gen`` mode: every position is eligible; the replacement text is the word's
     own transcription (a generated equivalent of the same word). ``json`` mode:
-    only positions whose transcription is a key in ``mapping`` are eligible, and
-    the replacement text is ``mapping[word.raw]`` (a different word). Up to K
-    positions are chosen at random from the eligible set.
+    only positions whose transcription is a key with a non-empty replacement list
+    in ``mapping`` are eligible, and the replacement text is a random choice from
+    ``mapping[word.raw]``. Up to K positions are chosen at random from the eligible
+    set.
     """
     n = len(xpr.words)
     if args.replace_mode == "json":
-        eligible = [i for i in range(n) if xpr.words[i].raw in mapping]
+        eligible = [i for i in range(n) if mapping.get(xpr.words[i].raw)]
     else:
         eligible = list(range(n))
     k = min(args.replace_k, len(eligible))
@@ -93,7 +94,9 @@ def choose_replacements(xpr, args, mapping):
         print(f"only {len(eligible)} eligible words, replacing {k} of {args.replace_k}")
     idxs = random.sample(eligible, k) if k > 0 else []
     texts = [
-        mapping[xpr.words[i].raw] if args.replace_mode == "json" else xpr.words[i].raw
+        random.choice(mapping[xpr.words[i].raw])
+        if args.replace_mode == "json"
+        else xpr.words[i].raw
         for i in idxs
     ]
     return idxs, texts
@@ -187,8 +190,9 @@ def main():
     )
     parser.add_argument(
         "--replace-json", type=file_check, default=None,
-        help="JSON {original_word: replacement_word} map (required for "
-        "--replace-mode json)",
+        help="JSON {original_word: [replacement_words]} map, one picked at random "
+        "per swap (build with utils.make_replacements); required for "
+        "--replace-mode json",
     )
     add_common_args(parser)
 
@@ -204,6 +208,11 @@ def main():
     if args.replace_mode == "json" and args.replace_json is None:
         raise RuntimeError("--replace-mode json requires --replace-json")
     mapping = json.load(open(args.replace_json)) if args.replace_json else {}
+    if any(not isinstance(v, list) for v in mapping.values()):
+        raise RuntimeError(
+            "--replace-json must map each word to a LIST of replacements "
+            "(rebuild it with utils.make_replacements)"
+        )
 
     data_root = args.data_root or DEFAULT_ROOT[args.dataset]
     resolve_writer = make_writer_resolver(args)
