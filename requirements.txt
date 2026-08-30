@@ -2,9 +2,10 @@
 # msgpack is required for the stage-4 memmap dataset format (utils/memmap_dataset.py,
 # utils/build_dataset.py). The legacy .pt caches work without it.
 msgpack
-# wordfreq is used ONLY by the font augmentation (utils/font_synth.py, default
-# --font-word-source); a non-font build does not need it. `nltk` or a wordlist
-# file are alternative --font-word-source values.
+# wordfreq is used by the font augmentation (utils/font_synth.py, default
+# --font-word-source; `nltk` or a wordlist file are alternatives) and by
+# utils/make_replacements.py (build replacements.json for regen_prompts.py). A
+# plain non-font, non-replacement build does not need it.
 wordfreq
 torch
 torchvision
