@@ -19,12 +19,6 @@ def range_check(x):
 
 def add_common_args(parser):
     parser.add_argument(
-        "--model-name",
-        type=str,
-        default="diffusionpen",
-        help="(deprecated)",
-    )
-    parser.add_argument(
         "--dataset", default="iam",
         help="IAM-space tag for build_style_bank / generation; training ignores it "
         "(train.py always uses the merged MergedWordDataset)",
