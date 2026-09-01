@@ -69,6 +69,6 @@ Logs land in `slurm-logs/<job>-<id>.out`. Adjust `--time`, `--mem`, `--gres` per
 - The style bank and learned placement/upsampling **fall back gracefully** when their
   artifact/checkpoint is absent (CNN style path / heuristic layout / Lanczos), so the
   generate scripts work before the aux models are trained.
-- `train_style_encoder.sh` uses that script's own flag names (e.g. `--batch_size`)
+- `train_style_encoder.sh` uses that script's own flag names (e.g. `--batch-size`)
   — distinct from the others' shared `add_common_args`.
 - Multi-GPU (`--dataparallel`) is out of scope for the current single-GPU focus.

@@ -246,7 +246,7 @@ def main():
         help="tag used only in saved checkpoint filenames",
     )
     parser.add_argument(
-        "--batch_size", type=int, default=320, help="input batch size for training"
+        "--batch-size", type=int, default=320, help="input batch size for training"
     )
     parser.add_argument(
         "--epochs",
