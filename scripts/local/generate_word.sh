@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Generate a single word crop (generate.py).
+# Generate a single word crop (generation/generate.py).
 # Env: WRITER_ID, SAMPLING_WORD, OUTPUT.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../config.sh"
 cd "$DP_ROOT"
 
-$PY generate.py \
+$PY -m generation.generate \
   --device "$DEVICE" \
   --dataset "$DATASET" \
   --save-path "$SAVE_PATH" \

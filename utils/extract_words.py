@@ -4,7 +4,7 @@ Point ``--input`` at a folder holding IAM ``<form>.xml`` files (e.g. the raw
 ``iam_data/xml/`` dir) and get a text file of every distinct word. Each ``<word>``
 element's ``text`` is unescaped exactly as ``utils.subprompt.Word.from_elem``
 does it, so an emitted token is exactly a ``word.raw`` -- a valid key for
-``--replace-mode json`` in ``regen_prompts.py`` (fill ``replacements.json`` from
+``--replace-mode json`` in ``generation/regen_prompts.py`` (fill ``replacements.json`` from
 this list). Stdlib only (no PIL/torch), so it runs anywhere.
 
     python -m utils.extract_words iam_data/xml -o words.txt

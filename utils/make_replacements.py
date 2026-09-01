@@ -1,11 +1,11 @@
-"""Build a replacements.json for regen_prompts.py from a word list, via wordfreq.
+"""Build a replacements.json for generation/regen_prompts.py from a word list, via wordfreq.
 
 Given a text file with one word per line (e.g. the output of
 ``utils.extract_words``), emit a JSON map ``{word: [k replacements]}`` where each
 replacement is a real, similarly-common word of roughly the same length (within
 ``--length-tol`` letters) and the same capitalization pattern as the source word.
 The k candidates are a random sample of the length-matched pool, so re-runs vary
-(pass ``--seed`` to fix them); ``regen_prompts.py --replace-mode json`` then picks
+(pass ``--seed`` to fix them); ``generation/regen_prompts.py --replace-mode json`` then picks
 one at random per substitution.
 
 Candidates come from wordfreq's frequency-ordered English list (lowercased), so

@@ -39,14 +39,14 @@ For VAE encoder-decoder and DDIM we use <a href="https://huggingface.co/stable-d
 
 For single image sampling run
 ```sh
-python generate.py --save_path ./diffusionpen_iam_model_path\
+python -m generation.generate --save_path ./diffusionpen_iam_model_path\
     --style_path ./style_models/iam_style_diffusionpen.pth\
     --sampling_word "WORD"
 ```
 
 For paragraph sampling run
 ```sh
-python gen_paragraph.py --save_path ./diffusionpen_iam_model_path\
+python -m generation.gen_paragraph --save_path ./diffusionpen_iam_model_path\
     --style_path ./style_models/iam_style_diffusionpen.pth\
     --text_file ./sample.txt
 ```

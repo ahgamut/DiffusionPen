@@ -4,7 +4,7 @@
 msgpack
 # wordfreq is used by the font augmentation (utils/font_synth.py, default
 # --font-word-source; `nltk` or a wordlist file are alternatives) and by
-# utils/make_replacements.py (build replacements.json for regen_prompts.py). A
+# utils/make_replacements.py (build replacements.json for generation/regen_prompts.py). A
 # plain non-font, non-replacement build does not need it.
 wordfreq
 torch

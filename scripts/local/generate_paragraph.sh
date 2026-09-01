@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generate a paragraph (gen_paragraph.py).
+# Generate a paragraph (generation/gen_paragraph.py).
 # Env: WRITER_ID, PROMPT_FILE, OUTPUT, PLACEMENT=heuristic|learned, MAX_LINE_WIDTH.
 # For learned layout / upscaling, PLACEMENT=learned and/or append --upsample:
 #   PLACEMENT=learned scripts/local/generate_paragraph.sh --upsample --upsampler-path "$UPSAMPLER_CKPT"
@@ -8,7 +8,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../config.sh"
 cd "$DP_ROOT"
 
-$PY gen_paragraph.py \
+$PY -m generation.gen_paragraph \
   --device "$DEVICE" \
   --dataset "$DATASET" \
   --save-path "$SAVE_PATH" \
