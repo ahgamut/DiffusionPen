@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pre-train the style encoder (style_encoder_train.py) -> $STYLE_ENC_SAVE.
-# Note: this script uses its own arg style (--batch_size, --mode); trains over the
+# Note: this script uses its own arg style (--batch_size); trains over the
 # merged split (MergedWordDataset style_mode). --dataset is only a checkpoint tag.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../config.sh"
@@ -15,5 +15,4 @@ $PY style_encoder_train.py \
   --device "$DEVICE" \
   --style-path "$STYLE_ENC_SAVE" \
   --save-path "$STYLE_ENC_SAVE" \
-  --mode "${STYLE_MODE:-mixed}" \
   "$@"

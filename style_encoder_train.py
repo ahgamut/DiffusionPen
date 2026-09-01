@@ -6,7 +6,6 @@ from torch.utils.data import DataLoader, random_split
 import os
 import argparse
 import torch.optim as optim
-import time
 
 #
 from utils.word_dataset import MergedWordDataset
@@ -18,165 +17,12 @@ from models import Mixed_Encoder, AvgMeter
 
 # ================ Performance and Loss Function ========================
 def performance(pred, label):
-    # loss = nn.CrossEntropyLoss()
-    # loss = loss(pred, label)
     loss = cross_entropy(pred, label)
     return loss
 
 
-# ===================== Training ==========================================
-
-
-def train_class_epoch(model, training_data, optimizer, args):
-    """Epoch operation in training phase"""
-
-    model.train()
-    total_loss = 0
-    n_corrects = 0
-    total = 0
-    pbar = training_data
-    for i, data in enumerate(pbar):
-
-        image = data[0].to(args.device)
-        label = data[2].to(args.device)
-
-        optimizer.zero_grad()
-
-        output = model(image)
-
-        loss = performance(output, label)
-        _, preds = torch.max(output.data, 1)
-
-        loss.backward()
-        optimizer.step()
-        total_loss += loss.item()
-        total += label.size(0)
-        n_corrects += (preds == label).sum().item()
-        # pbar.set_postfix(Loss=loss.item())
-
-    loss = total_loss / total
-    accuracy = n_corrects / total
-
-    return loss, accuracy
-
-
-def eval_class_epoch(model, validation_data, args):
-    """Epoch operation in evaluation phase"""
-
-    model.eval()
-
-    total_loss = 0
-    total = 0
-    n_corrects = 0
-    with torch.no_grad():
-        for i, data in enumerate(validation_data):
-
-            image = data[0].to(args.device)
-            label = data[2].to(args.device)
-
-            output = model(image)
-
-            loss = performance(output, label)  # performance
-            _, preds = torch.max(output.data, 1)
-
-            total_loss += loss.item()
-            n_corrects += (preds == label.data).sum().item()
-            total += label.size(0)
-            # prediction_list.append(preds)
-            # write into a file the img_path and the prediction
-            # with open('predictions.txt', 'a') as f:
-            #     for i, p in enumerate(preds):
-            #         f.write(f'{image_paths[i]},{p}\n')
-
-    loss = total_loss / total
-    accuracy = n_corrects / total
-
-    return loss, accuracy
-
-
-########################################################################
-def train_epoch_triplet(train_loader, model, criterion, optimizer, device, args):
-    model.train()
-    running_loss = 0
-    total = 0
-    loss_meter = AvgMeter()
-    pbar = train_loader
-    for i, data in enumerate(pbar):
-
-        img = data[0]
-        # print('wid', wid)
-        positive = data[3]
-        negative = data[4]
-
-        anchor = img.to(device)
-        positive = positive.to(device)
-        negative = negative.to(device)
-
-        anchor_out = model(anchor)
-        positive_out = model(positive)
-        negative_out = model(negative)
-
-        loss = criterion(anchor_out, positive_out, negative_out)
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        # running_loss.append(loss.cpu().detach().numpy())
-        running_loss += loss.item()
-        # pbar.set_postfix(triplet_loss=loss.item())
-        count = img.size(0)
-        loss_meter.update(loss.item(), count)
-        # pbar.set_postfix(triplet_loss=loss_meter.avg)
-        total += img.size(0)
-
-    print("total", total)
-    print("Training Loss: {:.4f}".format(running_loss / len(train_loader)))
-    return running_loss / total  # np.mean(running_loss)/total
-
-
-def val_epoch_triplet(val_loader, model, criterion, optimizer, device, args):
-    running_loss = 0
-    total = 0
-    pbar = val_loader
-    for i, data in enumerate(pbar):
-
-        img = data[0]
-        # transcr = data[1]
-        wid = data[2]
-        positive = data[3]
-        negative = data[4]
-
-        anchor = img.to(device)
-        positive = positive.to(device)
-        negative = negative.to(device)
-
-        anchor_out = model(anchor)
-        positive_out = model(positive)
-        negative_out = model(negative)
-
-        loss = criterion(anchor_out, positive_out, negative_out)
-
-        # running_loss.append(loss.cpu().detach().numpy())
-        running_loss += loss.item()
-        # pbar.set_postfix(triplet_loss=loss.item())
-        total += wid.size(0)
-
-    print("total", total)
-    print("Validation Loss: {:.4f}".format(running_loss / len(val_loader)))
-    return running_loss / total  # np.mean(running_loss)/total
-
-
 ############################ MIXED TRAINING ############################################
-def train_epoch_mixed(
-    train_loader,
-    model,
-    criterion_triplet,
-    criterion_classification,
-    optimizer,
-    device,
-    args,
-):
+def train_epoch_mixed(train_loader, model, criterion_triplet, optimizer, device, args):
 
     model.train()
     running_loss = 0
@@ -212,18 +58,11 @@ def train_epoch_mixed(
         loss.backward()
         optimizer.step()
 
-        # running_loss.append(loss.cpu().detach().numpy())
         running_loss += loss.item()
-        # pbar.set_postfix(triplet_loss=loss.item())
         count = img.size(0)
         loss_meter.update(loss.item(), count)
         loss_meter_triplet.update(triplet_loss.item(), count)
         loss_meter_class.update(classification_loss.item(), count)
-        # pbar.set_postfix(
-        #    mixed_loss=loss_meter.avg,
-        #    classification_loss=loss_meter_class.avg,
-        #    triplet_loss=loss_meter_triplet.avg,
-        # )
         total += img.size(0)
 
     accuracy = n_corrects / total
@@ -233,15 +72,7 @@ def train_epoch_mixed(
     return running_loss / total  # np.mean(running_loss)/total
 
 
-def val_epoch_mixed(
-    val_loader,
-    model,
-    criterion_triplet,
-    criterion_classification,
-    optimizer,
-    device,
-    args,
-):
+def val_epoch_mixed(val_loader, model, criterion_triplet, optimizer, device, args):
 
     running_loss = 0
     total = 0
@@ -270,11 +101,9 @@ def val_epoch_mixed(
 
         loss = classification_loss + triplet_loss
 
-        # running_loss.append(loss.cpu().detach().numpy())
         running_loss += loss.item()
         count = img.size(0)
         loss_meter.update(loss.item(), count)
-        # pbar.set_postfix(mixed_loss=loss_meter.avg)
         total += wid.size(0)
 
     print("total", total)
@@ -292,7 +121,6 @@ def train_mixed(
     train_loader,
     val_loader,
     criterion_triplet,
-    criterion_classification,
     optimizer,
     scheduler,
     device,
@@ -305,7 +133,6 @@ def train_mixed(
             train_loader,
             model,
             criterion_triplet,
-            criterion_classification,
             optimizer,
             device,
             args,
@@ -318,7 +145,6 @@ def train_mixed(
                 val_loader,
                 model,
                 criterion_triplet,
-                criterion_classification,
                 optimizer,
                 device,
                 args,
@@ -329,96 +155,6 @@ def train_mixed(
             torch.save(
                 model.state_dict(),
                 f"{args.save_path}/mixed_{args.dataset}_{args.model}.pth",
-            )
-            print("Saved Best Model!")
-
-        scheduler.step()
-
-
-def train_classification(
-    model, training_data, validation_data, optimizer, scheduler, device, args
-):  # scheduler # after optimizer
-    """Start training"""
-
-    num_of_no_improvement = 0
-    best_acc = 0
-
-    for epoch_i in range(args.epochs):
-        print("[Epoch", epoch_i, "]")
-
-        start = time.time()
-
-        train_loss, train_acc = train_class_epoch(model, training_data, optimizer, args)
-        print(
-            "Training: {loss: 8.5f} , accuracy: {accu:3.3f} %, "
-            "elapse: {elapse:3.3f} min".format(
-                loss=train_loss, accu=100 * train_acc, elapse=(time.time() - start) / 60
-            )
-        )
-
-        start = time.time()
-        model_state_dict = model.state_dict()
-        checkpoint = {"model": model_state_dict, "settings": args, "epoch": epoch_i}
-
-        if validation_data is not None:
-            val_loss, val_acc = eval_class_epoch(model, validation_data, args)
-            print(
-                "Validation: {loss: 8.5f} , accuracy: {accu:3.3f} %, "
-                "elapse: {elapse:3.3f} min".format(
-                    loss=val_loss, accu=100 * val_acc, elapse=(time.time() - start) / 60
-                )
-            )
-
-            if val_acc > best_acc:
-
-                print("- [Info] The checkpoint file has been updated.")
-                best_acc = val_acc
-                torch.save(
-                    model.state_dict(),
-                    f"{args.save_path}/{args.dataset}_classification_{args.model}.pth",
-                )
-                num_of_no_improvement = 0
-            else:
-                num_of_no_improvement += 1
-
-            if num_of_no_improvement >= 10:
-
-                print("Early stopping criteria met, stopping...")
-                break
-        else:
-            torch.save(
-                model.state_dict(),
-                f"{args.save_path}/{args.dataset}_classification_{args.model}.pth",
-            )
-
-        scheduler.step()
-
-
-###
-
-
-def train_triplet(
-    model, train_loader, val_loader, criterion, optimizer, scheduler, device, args
-):
-    best_loss = float("inf")
-    for epoch_i in range(args.epochs):
-        model.train()
-        train_loss = train_epoch_triplet(
-            train_loader, model, criterion, optimizer, device, args
-        )
-        print("Epoch: {}/{}".format(epoch_i + 1, args.epochs))
-
-        model.eval()
-        with torch.no_grad():
-            val_loss = val_epoch_triplet(
-                val_loader, model, criterion, optimizer, device, args
-            )
-
-        if val_loss < best_loss:
-            best_loss = val_loss
-            torch.save(
-                model.state_dict(),
-                f"{args.save_path}/triplet_{args.dataset}_{args.model}.pth",
             )
             print("Saved Best Model!")
 
@@ -535,12 +271,6 @@ def main():
     parser.add_argument(
         "--save-path", type=str, default="./style_models", help="path to save models"
     )
-    parser.add_argument(
-        "--mode",
-        type=str,
-        default="mixed",
-        help="mixed for DiffusionPen, triplet for DiffusionPen-triplet, or classification for DiffusionPen-triplet",
-    )
     parser.set_defaults(pretrained=False)
     args = parser.parse_args()
 
@@ -579,44 +309,20 @@ def main():
     model = model.to(device)
     optimizer_ft = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.StepLR(optimizer_ft, step_size=3, gamma=0.1)
-    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer_ft, mode="min", patience=3, factor=0.1
+
+    # DiffusionPen style encoder: joint classification + triplet metric learning.
+    criterion_triplet = nn.TripletMarginLoss(margin=1.0, p=2)
+    print("Using both classification and metric learning training")
+    train_mixed(
+        model,
+        train_loader,
+        val_loader,
+        criterion_triplet,
+        optimizer_ft,
+        scheduler,
+        device,
+        args,
     )
-    criterion = nn.TripletMarginLoss(margin=1.0, p=2)
-
-    # print(model)
-    # THIS IS THE CONDITION FOR DIFFUSIONPEN
-    if args.mode == "mixed":
-        criterion_triplet = nn.TripletMarginLoss(margin=1.0, p=2)
-        print("Using both classification and metric learning training")
-        train_mixed(
-            model,
-            train_loader,
-            val_loader,
-            criterion_triplet,
-            None,
-            optimizer_ft,
-            scheduler,
-            device,
-            args,
-        )
-
-    elif args.mode == "triplet":
-        train_triplet(
-            model,
-            train_loader,
-            val_loader,
-            criterion,
-            optimizer_ft,
-            lr_scheduler,
-            device,
-            args,
-        )
-
-    elif args.mode == "classification":
-        train_classification(
-            model, train_loader, val_loader, optimizer_ft, scheduler, device, args
-        )
     print("finished training")
 
 
