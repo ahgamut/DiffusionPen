@@ -483,7 +483,41 @@ def _darken_paste(dst, crop, pos):
     dst.paste(Image.fromarray(blended, "L"), (x, y))
 
 
-def _paste_ink_matched(dst, fake, word, ref_gray):
+def page_ink_level(ref_gray):
+    """Representative ink darkness of a page: a low percentile of the sub-Otsu
+    (dark) pixels. Not the absolute minimum (that's speckle) -- the 40th
+    percentile of the ink pixels is a typical stroke value. Returns 0 when the
+    page has no ink."""
+    arr = np.asarray(ref_gray.convert("L"), dtype=np.uint8)
+    thr, _ = cv2.threshold(arr, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    dark = arr[arr < thr]
+    if dark.size == 0:
+        return 0.0
+    return float(np.percentile(dark, 40))
+
+
+def match_ink(crop, ref_ink, blur_sigma=0.6):
+    """Darken a generated crop's ink to the page's ink level and soften it.
+
+    The model's ink runs lighter and sharper than scanned ink. Remap the crop's
+    own [ink, paper] range so its darkest strokes land at ``ref_ink`` while paper
+    stays white (255) -- keeping the background white matters, so the later
+    darken-composite leaves the paper between strokes untouched. A small Gaussian
+    blur then matches the scanner's stroke softness. ``blur_sigma=0`` disables it.
+    """
+    arr = np.asarray(crop.convert("L"), dtype=np.float32)
+    c_ink = float(np.percentile(arr, 5))
+    c_paper = float(np.percentile(arr, 95))
+    if c_paper - c_ink >= 1.0:
+        scaled = np.clip((arr - c_ink) / (c_paper - c_ink), 0.0, 1.0)
+        arr = ref_ink + scaled * (255.0 - ref_ink)
+    arr = np.clip(arr, 0, 255).astype(np.uint8)
+    if blur_sigma and blur_sigma > 0:
+        arr = cv2.GaussianBlur(arr, (0, 0), blur_sigma)
+    return Image.fromarray(arr, "L")
+
+
+def _paste_ink_matched(dst, fake, word, ref_gray, ref_ink=None):
     """Composite a generated word crop onto ``dst`` ('L') at ``word``'s real page
     position, darkening so the background shows between strokes.
 
@@ -492,7 +526,8 @@ def _paste_ink_matched(dst, fake, word, ref_gray):
     annotation bbox -- the bbox (esp. CSAFE's VOC boxes) runs looser than the
     ink, so scaling the tightly-cropped fake to fill it renders the word
     oversized and floated high. Falls back to the bbox when the box has no
-    measurable ink.
+    measurable ink. When ``ref_ink`` is given, the crop's ink is matched to that
+    page ink level (see ``match_ink``) before compositing.
     """
     box = (word.x_start, word.y_start, word.x_end, word.y_end)
     ink = _ink_bbox(ref_gray.crop(box))
@@ -505,6 +540,8 @@ def _paste_ink_matched(dst, fake, word, ref_gray):
     scaled_width = max(int(fake.width * ratio), 3)
     scaled_height = max(target_h, 3)
     scaled_img = fake.resize((scaled_width, scaled_height), Image.LANCZOS)
+    if ref_ink is not None:
+        scaled_img = match_ink(scaled_img, ref_ink)
     _darken_paste(dst, scaled_img, (tx, ty))
 
 
@@ -519,9 +556,10 @@ def build_ref_paragraph(fakes, xpr, raw_orig):
     """
     assert len(xpr.words) == len(fakes)
     ref_gray = raw_orig.convert("L")
+    ref_ink = page_ink_level(ref_gray)
     dupe = paper_background((xpr.img_width, xpr.img_height), ref_gray)
     for fake, word in zip(fakes, xpr.words):
-        _paste_ink_matched(dupe, fake, word, ref_gray)
+        _paste_ink_matched(dupe, fake, word, ref_gray, ref_ink)
     return xpr.get_cropped(dupe)
 
 
@@ -540,6 +578,7 @@ def build_replaced_paragraph(raw_orig, xpr, gen_crops, replace_indices):
     """
     assert len(gen_crops) == len(replace_indices)
     ref_gray = raw_orig.convert("L")
+    ref_ink = page_ink_level(ref_gray)
     dupe = raw_orig.convert("L")
     for fake, i in zip(gen_crops, replace_indices):
         word = xpr.words[i]
@@ -548,15 +587,16 @@ def build_replaced_paragraph(raw_orig, xpr, gen_crops, replace_indices):
         # generated crop over it so the cleared region carries the page's grain
         patch = paper_background((word.x_end - word.x_start, word.y_end - word.y_start), ref_gray)
         dupe.paste(patch, box)
-        _paste_ink_matched(dupe, fake, word, ref_gray)
+        _paste_ink_matched(dupe, fake, word, ref_gray, ref_ink)
     return xpr.get_cropped(dupe)
 
 
 def compose_on_paper(ink_img, ref_gray):
     """Drop an ink-on-white grayscale paragraph (the heuristic-reflow builders'
     output) onto paper matched to ``ref_gray``, darkening so only the ink prints.
-    Removes the flat-white background that makes those variants trivial to spot."""
-    ink = ink_img.convert("L")
+    Removes the flat-white background that makes those variants trivial to spot,
+    and matches the ink to the page's ink level (see ``match_ink``)."""
+    ink = match_ink(ink_img, page_ink_level(ref_gray))
     bg = paper_background(ink.size, ref_gray)
     _darken_paste(bg, ink, (0, 0))
     return bg
