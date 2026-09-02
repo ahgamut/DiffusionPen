@@ -14,6 +14,7 @@ from utils.generation import (
     build_paragraph_image,
     build_ref_paragraph,
     build_replaced_paragraph,
+    compose_on_paper,
 )
 from utils.arghandle import add_common_args, file_check
 from utils.page_prompt import (
@@ -121,7 +122,10 @@ def regen_variants(xpr, raw_orig, raw_crop, s, args, m, alt_words):
         max_word_length_width=max_word_length_width,
         longest_word_length=longest_word_length,
     )
-    regen_img = build_paragraph_image(scaled_padded_words, max_line_width=max_line_width)
+    regen_img = compose_on_paper(
+        build_paragraph_image(scaled_padded_words, max_line_width=max_line_width),
+        raw_orig,
+    )
     regen_img2 = build_ref_paragraph(fakes, xpr, raw_orig)
 
     # alt text, reflowed
@@ -136,7 +140,10 @@ def regen_variants(xpr, raw_orig, raw_crop, s, args, m, alt_words):
         max_word_length_width=max_word_length_width,
         longest_word_length=longest_word_length,
     )
-    regen_alt = build_paragraph_image(scaled_padded_words, max_line_width=max_line_width)
+    regen_alt = compose_on_paper(
+        build_paragraph_image(scaled_padded_words, max_line_width=max_line_width),
+        raw_orig,
+    )
     return regen_img, regen_img2, regen_alt
 
 

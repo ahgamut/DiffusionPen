@@ -412,8 +412,80 @@ def stack_images(images, margin=0, background="white"):
     return dst
 
 
+def _blank_patch(ref_gray, win=64):
+    """Locate the brightest, most uniform ``win``x``win`` window in the page --
+    i.e. blank paper. Returns the patch as a float32 array, or ``None`` when the
+    page is too small."""
+    arr = np.asarray(ref_gray.convert("L"), dtype=np.float32)
+    ph, pw = arr.shape
+    win = min(win, ph, pw)
+    if win < 8:
+        return None
+    step = max(win // 2, 1)
+    best = None
+    for yy in range(0, ph - win + 1, step):
+        for xx in range(0, pw - win + 1, step):
+            tile = arr[yy : yy + win, xx : xx + win]
+            # bright + low-structure scores highest (real ink lowers the mean and
+            # raises the std, so text regions never win)
+            score = tile.mean() - 2.0 * tile.std()
+            if best is None or score > best[0]:
+                best = (score, tile)
+    return best[1] if best is not None else None
+
+
+def paper_background(size, ref_gray, patch=64):
+    """A paper-like background matching the reference page's tone and grain.
+
+    Samples the brightest blank patch of ``ref_gray`` and stretches it to
+    ``size`` for a seam-free low-frequency tone field, then adds procedural
+    grain at the patch's own noise amplitude. Falls back to a flat page-tone
+    fill + light grain when no page patch is available. ``size`` is (w, h);
+    returns an 'L' image. A pure-white canvas is the giveaway this removes --
+    scanned paper is never flat 255.
+    """
+    w, h = size
+    tile = _blank_patch(ref_gray, patch)
+    if tile is None:
+        arr = np.asarray(ref_gray.convert("L"), dtype=np.float32)
+        tone = float(arr.max()) if arr.size else 255.0
+        field = np.full((h, w), tone, dtype=np.float32)
+        grain = 2.0
+    else:
+        grain = float(tile.std())
+        field = np.asarray(
+            Image.fromarray(tile.astype(np.uint8)).resize((w, h), Image.BILINEAR),
+            dtype=np.float32,
+        )
+    noise = np.random.normal(0.0, max(grain, 1.0), size=(h, w))
+    bg = np.clip(field + noise, 0, 255).astype(np.uint8)
+    return Image.fromarray(bg, "L")
+
+
+def _darken_paste(dst, crop, pos):
+    """Composite a grayscale ``crop`` onto ``dst`` ('L') at ``pos`` by darkening
+    (per-pixel min), so the ink stamps over the background but the crop's own
+    white pixels let the paper below show through -- unlike an opaque paste,
+    which would print a white box around every word."""
+    x, y = pos
+    cw, ch = crop.size
+    dw, dh = dst.size
+    if x >= dw or y >= dh:
+        return
+    cw = min(cw, dw - x)
+    ch = min(ch, dh - y)
+    if cw <= 0 or ch <= 0:
+        return
+    box = (x, y, x + cw, y + ch)
+    base = np.asarray(dst.crop(box).convert("L"))
+    top = np.asarray(crop.convert("L"))[:ch, :cw]
+    blended = np.minimum(base, top)
+    dst.paste(Image.fromarray(blended, "L"), (x, y))
+
+
 def _paste_ink_matched(dst, fake, word, ref_gray):
-    """Paste a generated word crop onto ``dst`` at ``word``'s real page position.
+    """Composite a generated word crop onto ``dst`` ('L') at ``word``'s real page
+    position, darkening so the background shows between strokes.
 
     Sizes and positions the crop to the ORIGINAL ink measured in ``ref_gray``
     (the unmodified page, grayscale) inside the word's bbox, NOT the raw
@@ -433,7 +505,7 @@ def _paste_ink_matched(dst, fake, word, ref_gray):
     scaled_width = max(int(fake.width * ratio), 3)
     scaled_height = max(target_h, 3)
     scaled_img = fake.resize((scaled_width, scaled_height), Image.LANCZOS)
-    dst.paste(scaled_img, (tx, ty))
+    _darken_paste(dst, scaled_img, (tx, ty))
 
 
 def build_ref_paragraph(fakes, xpr, raw_orig):
@@ -447,32 +519,47 @@ def build_ref_paragraph(fakes, xpr, raw_orig):
     """
     assert len(xpr.words) == len(fakes)
     ref_gray = raw_orig.convert("L")
-    dupe = Image.new("RGB", size=(xpr.img_width, xpr.img_height), color="white")
+    dupe = paper_background((xpr.img_width, xpr.img_height), ref_gray)
     for fake, word in zip(fakes, xpr.words):
         _paste_ink_matched(dupe, fake, word, ref_gray)
-    return xpr.get_cropped(dupe.convert("L"))
+    return xpr.get_cropped(dupe)
 
 
 def build_replaced_paragraph(raw_orig, xpr, gen_crops, replace_indices):
     """Composite generated word crops over selected bboxes of a real IAM form.
 
     Starts from the real form image (real ink everywhere) and, for each index in
-    ``replace_indices``, white-fills that word's XML bbox and pastes the matching
-    generated crop sized/placed to the original ink measured inside that bbox
-    (see ``_paste_ink_matched``). Every other word keeps its original real ink.
-    Returns the paragraph region as a grayscale image.
+    ``replace_indices``, clears that word's XML bbox to matched paper (not flat
+    white, which would leave a clean rectangle on textured paper) and darkens
+    the matching generated crop over it, sized/placed to the original ink
+    measured inside that bbox (see ``_paste_ink_matched``). Every other word
+    keeps its original real ink. Returns the paragraph region as a grayscale
+    image.
 
     ``gen_crops`` is aligned 1:1 with ``replace_indices``.
     """
     assert len(gen_crops) == len(replace_indices)
     ref_gray = raw_orig.convert("L")
-    dupe = raw_orig.convert("RGB")
+    dupe = raw_orig.convert("L")
     for fake, i in zip(gen_crops, replace_indices):
         word = xpr.words[i]
-        # clear the original ink under this word, then drop the generated crop in
-        dupe.paste((255, 255, 255), (word.x_start, word.y_start, word.x_end, word.y_end))
+        box = (word.x_start, word.y_start, word.x_end, word.y_end)
+        # erase the original ink with paper matched to the page, then darken the
+        # generated crop over it so the cleared region carries the page's grain
+        patch = paper_background((word.x_end - word.x_start, word.y_end - word.y_start), ref_gray)
+        dupe.paste(patch, box)
         _paste_ink_matched(dupe, fake, word, ref_gray)
-    return xpr.get_cropped(dupe.convert("L"))
+    return xpr.get_cropped(dupe)
+
+
+def compose_on_paper(ink_img, ref_gray):
+    """Drop an ink-on-white grayscale paragraph (the heuristic-reflow builders'
+    output) onto paper matched to ``ref_gray``, darkening so only the ink prints.
+    Removes the flat-white background that makes those variants trivial to spot."""
+    ink = ink_img.convert("L")
+    bg = paper_background(ink.size, ref_gray)
+    _darken_paste(bg, ink, (0, 0))
+    return bg
 
 
 #####
