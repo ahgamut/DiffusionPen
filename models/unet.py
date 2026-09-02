@@ -4,7 +4,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import einsum
 from einops import rearrange, repeat
 from inspect import isfunction
 import math
@@ -181,21 +180,11 @@ class CrossAttention(nn.Module):
         k = self.to_k(context)
         v = self.to_v(context)
 
-        mask = None  # torch.ones(1, 8192).bool().cuda('cuda:6')
-
         q, k, v = map(lambda t: rearrange(t, "b n (h d) -> (b h) n d", h=h), (q, k, v))
 
-        sim = einsum("b i d, b j d -> b i j", q, k) * self.scale
-
-        if exists(mask):
-            mask = rearrange(mask, "b j -> b 1 1 j")
-            max_neg_value = -torch.finfo(sim.dtype).max
-            sim.masked_fill_(~mask, max_neg_value)
-
-        # attention, what we cannot get enough of
-        attn = sim.softmax(dim=-1)
-
-        out = einsum("b i j, b j d -> b i d", attn, v)
+        # scale=self.scale matches SDPA's default (dim_head ** -0.5); the fused
+        # kernel skips materializing the (b h) i j attention matrix.
+        out = F.scaled_dot_product_attention(q, k, v, scale=self.scale)
         out = rearrange(out, "(b h) n d -> b n (h d)", h=h)
         return self.to_out(out)
 
@@ -637,12 +626,11 @@ class QKVAttentionLegacy(nn.Module):
         assert width % (3 * self.n_heads) == 0
         ch = width // (3 * self.n_heads)
         q, k, v = qkv.reshape(bs * self.n_heads, ch * 3, length).split(ch, dim=1)
-        scale = 1 / math.sqrt(math.sqrt(ch))
-        weight = torch.einsum(
-            "bct,bcs->bts", q * scale, k * scale
-        )  # More stable with f16 than dividing afterwards
-        weight = torch.softmax(weight.float(), dim=-1).type(weight.dtype)
-        a = torch.einsum("bts,bcs->bct", weight, v)
+        # SDPA wants (..., seq, feat); these are (bh, ch=feat, length=seq).
+        # Its default scale (ch ** -0.5) matches the original 1/sqrt(ch).
+        a = F.scaled_dot_product_attention(
+            q.transpose(-1, -2), k.transpose(-1, -2), v.transpose(-1, -2)
+        ).transpose(-1, -2)
         return a.reshape(bs, -1, length)
 
     @staticmethod
@@ -669,16 +657,14 @@ class QKVAttention(nn.Module):
         assert width % (3 * self.n_heads) == 0
         ch = width // (3 * self.n_heads)
         q, k, v = qkv.chunk(3, dim=1)
-        scale = 1 / math.sqrt(math.sqrt(ch))
-        weight = torch.einsum(
-            "bct,bcs->bts",
-            (q * scale).view(bs * self.n_heads, ch, length),
-            (k * scale).view(bs * self.n_heads, ch, length),
-        )  # More stable with f16 than dividing afterwards
-        weight = torch.softmax(weight.float(), dim=-1).type(weight.dtype)
-        a = torch.einsum(
-            "bts,bcs->bct", weight, v.reshape(bs * self.n_heads, ch, length)
-        )
+        q = q.reshape(bs * self.n_heads, ch, length)
+        k = k.reshape(bs * self.n_heads, ch, length)
+        v = v.reshape(bs * self.n_heads, ch, length)
+        # SDPA wants (..., seq, feat); these are (bh, ch=feat, length=seq).
+        # Its default scale (ch ** -0.5) matches the original 1/sqrt(ch).
+        a = F.scaled_dot_product_attention(
+            q.transpose(-1, -2), k.transpose(-1, -2), v.transpose(-1, -2)
+        ).transpose(-1, -2)
         return a.reshape(bs, -1, length)
 
     @staticmethod
