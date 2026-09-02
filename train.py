@@ -112,6 +112,12 @@ def train(
     # the per-step vae.encode is skipped (see build_latent_cache).
     use_latent_cache = getattr(loader.dataset, "latent_cache", None) is not None
 
+    # bf16 autocast over the model forward + loss; bf16 has enough dynamic range
+    # that no GradScaler is needed (weights stay fp32; only ops run in bf16).
+    amp = getattr(args, "amp", False)
+    amp_device = "cuda" if "cuda" in str(args.device) else "cpu"
+    print("AMP (bf16):", amp)
+
     for epoch in range(args.epochs):
         print("Epoch:", epoch)
         pbar = tqdm(loader, desc="\n::")
@@ -160,15 +166,18 @@ def train(
             x_t = noisy_images
             t = timesteps
 
-            predicted_noise = model(
-                x_t,
-                timesteps=t,
-                context=text_features,
-                y=s_id,
-                style_extractor=style_features,
-            )
+            with torch.autocast(
+                device_type=amp_device, dtype=torch.bfloat16, enabled=amp
+            ):
+                predicted_noise = model(
+                    x_t,
+                    timesteps=t,
+                    context=text_features,
+                    y=s_id,
+                    style_extractor=style_features,
+                )
 
-            loss = mse_loss(noise, predicted_noise)
+                loss = mse_loss(noise, predicted_noise)
 
             optimizer.zero_grad()
 
@@ -410,7 +419,15 @@ def main():
     parser.add_argument(
         "--no-sample-preview", dest="sample_preview", action="store_false"
     )
-    parser.set_defaults(style_cache=True, latent_cache=True, sample_preview=True)
+    parser.add_argument(
+        "--amp", dest="amp", action="store_true",
+        help="mixed-precision training (bf16 autocast over the model forward + "
+        "loss); no GradScaler needed for bf16",
+    )
+    parser.add_argument("--no-amp", dest="amp", action="store_false")
+    parser.set_defaults(
+        style_cache=True, latent_cache=True, sample_preview=True, amp=True
+    )
     add_common_args(parser)
     args = parser.parse_args()
 
