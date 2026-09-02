@@ -412,41 +412,66 @@ def stack_images(images, margin=0, background="white"):
     return dst
 
 
+def _paste_ink_matched(dst, fake, word, ref_gray):
+    """Paste a generated word crop onto ``dst`` at ``word``'s real page position.
+
+    Sizes and positions the crop to the ORIGINAL ink measured in ``ref_gray``
+    (the unmodified page, grayscale) inside the word's bbox, NOT the raw
+    annotation bbox -- the bbox (esp. CSAFE's VOC boxes) runs looser than the
+    ink, so scaling the tightly-cropped fake to fill it renders the word
+    oversized and floated high. Falls back to the bbox when the box has no
+    measurable ink.
+    """
+    box = (word.x_start, word.y_start, word.x_end, word.y_end)
+    ink = _ink_bbox(ref_gray.crop(box))
+    if ink is None:
+        tx, ty, target_h = word.x_start, word.y_start, word.height
+    else:
+        ix, iy, iw, ih = ink
+        tx, ty, target_h = word.x_start + ix, word.y_start + iy, ih
+    ratio = target_h / max(fake.height, 1)
+    scaled_width = max(int(fake.width * ratio), 3)
+    scaled_height = max(target_h, 3)
+    scaled_img = fake.resize((scaled_width, scaled_height), Image.LANCZOS)
+    dst.paste(scaled_img, (tx, ty))
+
+
+def build_ref_paragraph(fakes, xpr, raw_orig):
+    """Regenerate a whole paragraph in place: every word replaced by its
+    generated crop at the word's real page position, on a blank canvas.
+
+    ``fakes`` is aligned 1:1 with ``xpr.words``. Each crop is sized/placed to the
+    original ink measured on ``raw_orig`` (see ``_paste_ink_matched``), so the
+    exact-placement dupe matches the real page's geometry instead of the looser
+    annotation bboxes. Returns the paragraph region as a grayscale image.
+    """
+    assert len(xpr.words) == len(fakes)
+    ref_gray = raw_orig.convert("L")
+    dupe = Image.new("RGB", size=(xpr.img_width, xpr.img_height), color="white")
+    for fake, word in zip(fakes, xpr.words):
+        _paste_ink_matched(dupe, fake, word, ref_gray)
+    return xpr.get_cropped(dupe.convert("L"))
+
+
 def build_replaced_paragraph(raw_orig, xpr, gen_crops, replace_indices):
     """Composite generated word crops over selected bboxes of a real IAM form.
 
     Starts from the real form image (real ink everywhere) and, for each index in
     ``replace_indices``, white-fills that word's XML bbox and pastes the matching
-    generated crop scaled to the original ink's measured extent inside that bbox
-    (not the raw bbox, which runs looser than the ink and would oversize the
-    swap). Every other word keeps its original real ink. Returns the paragraph
-    region as a grayscale image.
+    generated crop sized/placed to the original ink measured inside that bbox
+    (see ``_paste_ink_matched``). Every other word keeps its original real ink.
+    Returns the paragraph region as a grayscale image.
 
     ``gen_crops`` is aligned 1:1 with ``replace_indices``.
     """
     assert len(gen_crops) == len(replace_indices)
+    ref_gray = raw_orig.convert("L")
     dupe = raw_orig.convert("RGB")
     for fake, i in zip(gen_crops, replace_indices):
         word = xpr.words[i]
-        box = (word.x_start, word.y_start, word.x_end, word.y_end)
-        # Match the generated crop to the ORIGINAL ink, not the annotation bbox.
-        # The bbox (esp. CSAFE's VOC boxes) is looser than the ink, so scaling the
-        # tightly-cropped fake to fill it renders the swap oversized and floated
-        # high; measure the real ink's tight extent inside the box first, and both
-        # size and position the fake to it. Fall back to the bbox on a blank box.
-        ink = _ink_bbox(dupe.crop(box))
         # clear the original ink under this word, then drop the generated crop in
-        dupe.paste((255, 255, 255), box)
-        if ink is None:
-            tx, ty, target_h = word.x_start, word.y_start, word.height
-        else:
-            ix, iy, iw, ih = ink
-            tx, ty, target_h = word.x_start + ix, word.y_start + iy, ih
-        ratio = target_h / max(fake.height, 1)
-        scaled_width = max(int(fake.width * ratio), 3)
-        scaled_height = max(target_h, 3)
-        scaled_img = fake.resize((scaled_width, scaled_height), Image.LANCZOS)
-        dupe.paste(scaled_img, (tx, ty))
+        dupe.paste((255, 255, 255), (word.x_start, word.y_start, word.x_end, word.y_end))
+        _paste_ink_matched(dupe, fake, word, ref_gray)
     return xpr.get_cropped(dupe.convert("L"))
 
 

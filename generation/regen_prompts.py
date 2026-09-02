@@ -12,6 +12,7 @@ from utils.generation import (
     build_fake_image_N,
     add_rescale_padding,
     build_paragraph_image,
+    build_ref_paragraph,
     build_replaced_paragraph,
 )
 from utils.arghandle import add_common_args, file_check
@@ -22,24 +23,6 @@ from utils.page_prompt import (
     DEFAULT_ROOT,
 )
 from utils.gen_cli import init_generation, read_words, add_output_arg
-
-
-def build_ref_paragraph(fakes, xpr, max_line_width, longest_word_length):
-    assert len(xpr.words) == len(fakes)
-    dupe = Image.new("RGB", size=(xpr.img_width, xpr.img_height), color="white")
-
-    for i in range(len(fakes)):
-        word = xpr.words[i]
-        fake = fakes[i]
-        ratio = word.height / fake.height
-        #
-        scaled_width = int(fake.width * ratio)
-        scaled_height = word.height
-        scaled_img = fakes[i].resize((scaled_width, scaled_height), Image.LANCZOS)
-        dupe.paste(scaled_img, (word.x_start, word.y_start))
-
-    dupe = dupe.convert("L")
-    return xpr.get_cropped(dupe)
 
 
 def pick_prompt(files, dataset, data_root):
@@ -139,10 +122,7 @@ def regen_variants(xpr, raw_orig, raw_crop, s, args, m, alt_words):
         longest_word_length=longest_word_length,
     )
     regen_img = build_paragraph_image(scaled_padded_words, max_line_width=max_line_width)
-    regen_img2 = build_ref_paragraph(
-        fakes, xpr, max_line_width=max_line_width,
-        longest_word_length=longest_word_length,
-    )
+    regen_img2 = build_ref_paragraph(fakes, xpr, raw_orig)
 
     # alt text, reflowed
     words = alt_words

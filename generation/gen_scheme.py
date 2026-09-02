@@ -15,6 +15,7 @@ from utils.generation import (
     build_fake_interp_N,
     add_rescale_padding,
     build_paragraph_image,
+    build_ref_paragraph,
 )
 from utils.relcharsize import build_placed_paragraph
 from utils.relcharsize import build_bbox_place_paragraph
@@ -47,26 +48,6 @@ def resave_real(xmlname, imgname, targname):
     save_threshed(crop, targname)
 
 
-def build_ref_paragraph(fakes, xpr, max_line_width, longest_word_length):
-    assert len(xpr.words) == len(fakes)
-    dupe = Image.new("RGB", size=(xpr.img_width, xpr.img_height), color="white")
-
-    for i in range(len(fakes)):
-        word = xpr.words[i]
-        fake = fakes[i]
-        ratio = word.height / fake.height
-        #
-        scaled_width = int(fake.width * ratio)
-        scaled_height = word.height
-        scaled_width = max(scaled_width, 3)
-        scaled_height = max(scaled_height, 3)
-        scaled_img = fakes[i].resize((scaled_width, scaled_height), Image.LANCZOS)
-        dupe.paste(scaled_img, (word.x_start, word.y_start))
-
-    dupe = dupe.convert("L")
-    return xpr.get_cropped(dupe)
-
-
 def make_closedset(fname, targdir):
     df = pd.read_csv(fname)
     for ind, row in df.iterrows():
@@ -85,8 +66,6 @@ def resave_fake(xmlname, imgname, targname, faketype):
         print("should regenerate", imgname, "place nicely and save")
         words = [w.raw for w in xpr.words]
         longest_word_length = max(len(word) for word in words)
-        raw_crop = xpr.get_cropped(raw_orig)
-        max_line_width = raw_crop.width
         max_word_length_width = 0
         fakes, max_word_length_width = build_fake_image_N(
             words,
@@ -96,12 +75,7 @@ def resave_fake(xmlname, imgname, targname, faketype):
             longest_word_length=longest_word_length,
             max_word_length_width=max_word_length_width,
         )
-        regen_img = build_ref_paragraph(
-            fakes,
-            xpr,
-            max_line_width=max_line_width,
-            longest_word_length=longest_word_length,
-        )
+        regen_img = build_ref_paragraph(fakes, xpr, raw_orig)
         save_threshed(regen_img, targname)
         return
 
@@ -207,10 +181,8 @@ def resave_interp(xmlname, imgname, targname, widinfo, interp):
         words = [w.raw for w in xpr.words]
         longest_word_length = max(len(word) for word in words)
         raw_orig = Image.open(os.path.join("./iam_data", "forms", xpr.idd + ".png"))
-        raw_crop = xpr.get_cropped(raw_orig)
         s1 = IAM_TempLoader.map_wid_to_index(wid1)
         s2 = IAM_TempLoader.map_wid_to_index(wid2)
-        max_line_width = raw_crop.width
         CTX.args.writer_1 = s1
         CTX.args.writer_2 = s2
         CTX.args.mix_rate = alpha
@@ -222,12 +194,7 @@ def resave_interp(xmlname, imgname, targname, widinfo, interp):
             longest_word_length=longest_word_length,
             max_word_length_width=max_word_length_width,
         )
-        regen_img2 = build_ref_paragraph(
-            fakes,
-            xpr,
-            max_line_width=max_line_width,
-            longest_word_length=longest_word_length,
-        )
+        regen_img2 = build_ref_paragraph(fakes, xpr, raw_orig)
         save_threshed(regen_img2, targname)
     else:
         print(
