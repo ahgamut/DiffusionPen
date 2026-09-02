@@ -2,10 +2,7 @@ import argparse
 import os
 import json
 import pandas as pd
-from PIL import Image, ImageOps
-import glob
-import sys
-import traceback
+from PIL import Image
 import random
 import torch
 import skimage.filters as skfilt
@@ -22,7 +19,7 @@ from utils.generation import (
 from utils.relcharsize import build_placed_paragraph
 from utils.relcharsize import build_bbox_place_paragraph
 from utils.relcharsize import get_possible_font_sizes
-from utils.subprompt import Word, Prompt
+from utils.subprompt import Prompt
 from utils.arghandle import add_common_args
 from utils.gen_cli import add_max_line_width_arg
 from utils.model_setup import load_models

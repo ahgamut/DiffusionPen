@@ -9,9 +9,6 @@ import torch.optim as optim
 
 #
 from utils.word_dataset import MergedWordDataset
-from utils.auxiliary_functions import (
-    affine_transformation,
-)
 from models import Mixed_Encoder, AvgMeter
 
 
