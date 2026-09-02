@@ -7,6 +7,7 @@ import torchvision
 from torch import optim
 from tqdm import tqdm
 import copy
+import time
 import argparse
 import json
 from diffusers import AutoencoderKL, DDIMScheduler
@@ -84,6 +85,35 @@ def build_MergedDataset(args, transform):
     return train_data, test_data, style_classes
 
 
+def _tick(device):
+    """A wall-clock timestamp taken after a CUDA sync, so GPU work launched
+    before it is actually finished (kernels are async). Use for --profile-steps."""
+    if "cuda" in str(device):
+        torch.cuda.synchronize()
+    return time.perf_counter()
+
+
+def _print_profile(prof, args):
+    """Print the per-step timing breakdown gathered by --profile-steps. `canine`
+    is a standalone CANINE forward (its share of `fwd`, which already includes
+    it); `data` is dataloader wait between steps; the rest is misc per-step glue.
+    Times are per-step averages in ms."""
+    n = max(prof["n"], 1)
+    ms = {k: 1000.0 * prof[k] / n for k in ("data", "canine", "fwd", "bwd", "opt")}
+    step = ms["data"] + ms["fwd"] + ms["bwd"] + ms["opt"]
+    print("\n==== per-step profile (avg over {} steps, amp={}) ====".format(
+        n, getattr(args, "amp", False)))
+    print("  dataloader wait : {:8.1f} ms".format(ms["data"]))
+    print("  model fwd       : {:8.1f} ms".format(ms["fwd"]))
+    print("    of which CANINE (fwd only): {:8.1f} ms ({:.0f}% of fwd)".format(
+        ms["canine"], 100.0 * ms["canine"] / max(ms["fwd"], 1e-9)))
+    print("  backward        : {:8.1f} ms".format(ms["bwd"]))
+    print("  optimizer step  : {:8.1f} ms".format(ms["opt"]))
+    print("  ----")
+    print("  measured/step   : {:8.1f} ms  (data+fwd+bwd+opt)".format(step))
+    print("  note: CANINE backward is inside `backward`, not isolated here.\n")
+
+
 def train(
     diffusion,
     model,
@@ -118,10 +148,20 @@ def train(
     amp_device = "cuda" if "cuda" in str(args.device) else "cpu"
     print("AMP (bf16):", amp)
 
+    # --profile-steps: time the per-step regions (CANINE fwd isolated, full model
+    # fwd, backward, opt) and exit. Step 0 is a warmup (caches/allocator warm).
+    prof_steps = getattr(args, "profile_steps", 0)
+    prof = {"data": 0.0, "canine": 0.0, "fwd": 0.0, "bwd": 0.0, "opt": 0.0, "n": 0}
+    prof_prev = None  # bottom-of-previous-step timestamp, for dataloader wait
+
     for epoch in range(args.epochs):
         print("Epoch:", epoch)
         pbar = tqdm(loader, desc="\n::")
         for i, data in enumerate(pbar):
+            if prof_steps:
+                t_top = _tick(args.device)
+                if i > 0 and prof_prev is not None:
+                    prof["data"] += t_top - prof_prev
             images = data[0].to(args.device)
             transcr = data[1]
             s_id = data[2].to(args.device)
@@ -166,6 +206,18 @@ def train(
             x_t = noisy_images
             t = timesteps
 
+            if prof_steps and i > 0 and text_encoder is not None:
+                # isolate the CANINE text-encoder forward (same call the UNet
+                # makes internally at unet.py: text_encoder(**context)), timed
+                # standalone under the same autocast as training.
+                t0 = _tick(args.device)
+                with torch.autocast(
+                    device_type=amp_device, dtype=torch.bfloat16, enabled=amp
+                ):
+                    text_encoder(**text_features)
+                prof["canine"] += _tick(args.device) - t0
+
+            t_fwd0 = _tick(args.device) if prof_steps else 0
             with torch.autocast(
                 device_type=amp_device, dtype=torch.bfloat16, enabled=amp
             ):
@@ -178,12 +230,20 @@ def train(
                 )
 
                 loss = mse_loss(noise, predicted_noise)
+            if prof_steps and i > 0:
+                prof["fwd"] += _tick(args.device) - t_fwd0
 
             optimizer.zero_grad()
 
+            t_bwd0 = _tick(args.device) if prof_steps else 0
             loss.backward()
+            if prof_steps and i > 0:
+                prof["bwd"] += _tick(args.device) - t_bwd0
 
+            t_opt0 = _tick(args.device) if prof_steps else 0
             optimizer.step()
+            if prof_steps and i > 0:
+                prof["opt"] += _tick(args.device) - t_opt0
 
             ema.step_ema(ema_model, model)
 
@@ -193,6 +253,14 @@ def train(
 
             if lr_scheduler is not None:
                 lr_scheduler.step()
+
+            if prof_steps:
+                prof_prev = _tick(args.device)
+                if i > 0:
+                    prof["n"] += 1
+                    if prof["n"] >= prof_steps:
+                        _print_profile(prof, args)
+                        return
 
         print("train MSE:", repr(loss_meter))
 
@@ -425,6 +493,12 @@ def main():
         "loss); no GradScaler needed for bf16",
     )
     parser.add_argument("--no-amp", dest="amp", action="store_false")
+    parser.add_argument(
+        "--profile-steps", type=int, default=0,
+        help="if >0, time CANINE-fwd / model-fwd / backward / opt-step over this "
+        "many steps (after a warmup step), print a breakdown, and exit without "
+        "training",
+    )
     parser.set_defaults(
         style_cache=True, latent_cache=True, sample_preview=True, amp=True
     )
