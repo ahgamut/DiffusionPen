@@ -591,6 +591,24 @@ def build_replaced_paragraph(raw_orig, xpr, gen_crops, replace_indices):
     return xpr.get_cropped(dupe)
 
 
+def capture_png(img, out_path, noise_sigma=3.0):
+    """Save ``img`` through one uniform 'capture' pass, as PNG.
+
+    Meant to be applied to BOTH the real reference crop and every dupe so their
+    low-level statistics -- and file size -- share one distribution: convert to
+    grayscale, add a faint common sensor-noise floor, and re-encode as PNG.
+    Because a scanned page carries grain everywhere while a synthetic composite
+    starts pristine, a shared noise floor + identical PNG encoding is what pulls
+    their byte sizes together; running it symmetrically keeps the real-vs-fake
+    comparison fair. ``noise_sigma=0`` still re-encodes (format/mode parity).
+    """
+    arr = np.asarray(img.convert("L"), dtype=np.float32)
+    if noise_sigma and noise_sigma > 0:
+        arr = arr + np.random.normal(0.0, noise_sigma, size=arr.shape)
+    arr = np.clip(arr, 0, 255).astype(np.uint8)
+    Image.fromarray(arr, "L").save(out_path, format="PNG")
+
+
 def compose_on_paper(ink_img, ref_gray):
     """Drop an ink-on-white grayscale paragraph (the heuristic-reflow builders'
     output) onto paper matched to ``ref_gray``, darkening so only the ink prints.

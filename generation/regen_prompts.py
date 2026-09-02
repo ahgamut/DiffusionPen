@@ -15,6 +15,7 @@ from utils.generation import (
     build_ref_paragraph,
     build_replaced_paragraph,
     compose_on_paper,
+    capture_png,
 )
 from utils.arghandle import add_common_args, file_check
 from utils.page_prompt import (
@@ -181,6 +182,12 @@ def main():
         "per swap (build with utils.make_replacements); required for "
         "--replace-mode json",
     )
+    parser.add_argument(
+        "--capture-noise", type=float, default=3.0,
+        help="sensor-noise sigma for the shared capture pass applied to every "
+        "saved image (real crop AND dupes) so their file sizes/stats match; "
+        "0 = re-encode only",
+    )
     add_common_args(parser)
 
     args, m = init_generation(parser, __file__)
@@ -216,24 +223,27 @@ def main():
             s = resolve_writer(xpr.writer_id)
 
             rid = "%04x" % random.randint(0, 1000)
-            raw_crop.save(os.path.join(args.output, f"{xpr.idd}_orig.png"))
+            nz = args.capture_noise
+            capture_png(raw_crop, os.path.join(args.output, f"{xpr.idd}_orig.png"), nz)
 
             if args.replace_k > 0:
                 replaced = do_replacement(xpr, raw_orig, s, args, m, mapping)
                 if replaced is not None:
-                    replaced.save(
+                    capture_png(
+                        replaced,
                         os.path.join(
                             args.output,
                             f"{xpr.idd}_replaced_{args.replace_k}_{args.replace_mode}_{rid}.png",
-                        )
+                        ),
+                        nz,
                     )
             else:
                 regen_img, regen_img2, regen_alt = regen_variants(
                     xpr, raw_orig, raw_crop, s, args, m, alt_words
                 )
-                regen_img.save(os.path.join(args.output, f"{xpr.idd}_fake_{rid}.png"))
-                regen_img2.save(os.path.join(args.output, f"{xpr.idd}_fake-sz_{rid}.png"))
-                regen_alt.save(os.path.join(args.output, f"{xpr.idd}_alt_{rid}.png"))
+                capture_png(regen_img, os.path.join(args.output, f"{xpr.idd}_fake_{rid}.png"), nz)
+                capture_png(regen_img2, os.path.join(args.output, f"{xpr.idd}_fake-sz_{rid}.png"), nz)
+                capture_png(regen_alt, os.path.join(args.output, f"{xpr.idd}_alt_{rid}.png"), nz)
         except Exception as e:
             print(e)
             tb = traceback.format_tb(sys.exc_info()[2])
