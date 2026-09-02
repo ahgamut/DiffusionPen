@@ -165,7 +165,7 @@ class Prompt:
         parts = list(x for x in root)
         text_prompt = [unescape(line.attrib["text"]) for line in parts[0]]
         text_prompt = "\n".join(text_prompt)
-        text_prompt = re.sub("([^a-zA-Z\d\s:])", " \\1 ", text_prompt)
+        text_prompt = re.sub(r"([^a-zA-Z\d\s:])", r" \1 ", text_prompt)
         # print(text_prompt)
         self.img_width = int(root.attrib["width"])
         self.img_height = int(root.attrib["height"])
