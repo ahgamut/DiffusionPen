@@ -222,7 +222,6 @@ class BasicTransformerBlock(nn.Module):
         dropout=0.0,
         context_dim=None,
         gated_ff=True,
-        checkpoint=True,
     ):
         super().__init__()
         # self.weights = ResNet18_Weights.DEFAULT
@@ -243,12 +242,9 @@ class BasicTransformerBlock(nn.Module):
         self.norm1 = nn.LayerNorm(dim)
         self.norm2 = nn.LayerNorm(dim)
         self.norm3 = nn.LayerNorm(dim)
-        self.checkpoint = checkpoint
 
     def forward(self, x, context=None):
-        return checkpoint(
-            self._forward, (x, context), self.parameters(), self.checkpoint
-        )
+        return self._forward(x, context)
 
     def _forward(self, x, context=None):
 
@@ -591,10 +587,7 @@ class AttentionBlock(nn.Module):
         self.proj_out = zero_module(nn.Conv2d(channels, channels, 1))
 
     def forward(self, x):
-        return checkpoint(
-            self._forward, (x,), self.parameters(), True
-        )  # TODO: check checkpoint usage, is True # TODO: fix the .half call!!!
-        # return pt_checkpoint(self._forward, x)  # pytorch
+        return self._forward(x)
 
     def _forward(self, x):
         b, c, *spatial = x.shape
