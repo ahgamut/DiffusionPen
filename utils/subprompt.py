@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 from xml.sax.saxutils import unescape as _unescape
 import re
 import struct
-from PIL import Image, ImageDraw
+from PIL import ImageDraw
 from dataclasses import dataclass
 
 

@@ -26,7 +26,6 @@ from collections import OrderedDict
 import torch
 from torch.utils.data import Dataset
 
-from utils.subprompt import Word
 
 SEQ_CACHE = "placer_IAM_seq2.pt"
 WRITERS_GLOBAL = "writers_global.json"

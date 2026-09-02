@@ -2,7 +2,6 @@ import argparse
 import os
 
 import torch
-import torch.nn as nn
 from torch import optim
 from torch.nn import DataParallel
 from transformers import CanineModel, CanineTokenizer
