@@ -33,14 +33,25 @@ def save_image_grid(images, path, args, **kwargs):
     return im
 
 
-def crop_whitespace_width(img):
-    # tensor image to PIL
-    img_gray = np.array(img)
+def _ink_bbox(img):
+    """Tight (x, y, w, h) bbox of the ink in a grayscale image via Otsu, or
+    ``None`` when the crop is blank (no foreground pixels)."""
+    img_gray = np.array(img.convert("L"))
     ret, thresholded = cv2.threshold(
         img_gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
     )
     coords = cv2.findNonZero(thresholded)
-    x, y, w, h = cv2.boundingRect(coords)
+    if coords is None:
+        return None
+    return cv2.boundingRect(coords)
+
+
+def crop_whitespace_width(img):
+    # tensor image to PIL
+    bbox = _ink_bbox(img)
+    if bbox is None:
+        return np.array(img)
+    x, y, w, h = bbox
     # rect = img.crop((x, 0, x + w, original_height))
     rect = img.crop((x, y, x + w, y + h))
     return np.array(rect)
@@ -406,9 +417,10 @@ def build_replaced_paragraph(raw_orig, xpr, gen_crops, replace_indices):
 
     Starts from the real form image (real ink everywhere) and, for each index in
     ``replace_indices``, white-fills that word's XML bbox and pastes the matching
-    generated crop scaled to the bbox height (same scaling as the exact-position
-    ``build_ref_paragraph``). Every other word keeps its original real ink.
-    Returns the paragraph region as a grayscale image.
+    generated crop scaled to the original ink's measured extent inside that bbox
+    (not the raw bbox, which runs looser than the ink and would oversize the
+    swap). Every other word keeps its original real ink. Returns the paragraph
+    region as a grayscale image.
 
     ``gen_crops`` is aligned 1:1 with ``replace_indices``.
     """
@@ -416,13 +428,25 @@ def build_replaced_paragraph(raw_orig, xpr, gen_crops, replace_indices):
     dupe = raw_orig.convert("RGB")
     for fake, i in zip(gen_crops, replace_indices):
         word = xpr.words[i]
+        box = (word.x_start, word.y_start, word.x_end, word.y_end)
+        # Match the generated crop to the ORIGINAL ink, not the annotation bbox.
+        # The bbox (esp. CSAFE's VOC boxes) is looser than the ink, so scaling the
+        # tightly-cropped fake to fill it renders the swap oversized and floated
+        # high; measure the real ink's tight extent inside the box first, and both
+        # size and position the fake to it. Fall back to the bbox on a blank box.
+        ink = _ink_bbox(dupe.crop(box))
         # clear the original ink under this word, then drop the generated crop in
-        dupe.paste((255, 255, 255), (word.x_start, word.y_start, word.x_end, word.y_end))
-        ratio = word.height / max(fake.height, 1)
+        dupe.paste((255, 255, 255), box)
+        if ink is None:
+            tx, ty, target_h = word.x_start, word.y_start, word.height
+        else:
+            ix, iy, iw, ih = ink
+            tx, ty, target_h = word.x_start + ix, word.y_start + iy, ih
+        ratio = target_h / max(fake.height, 1)
         scaled_width = max(int(fake.width * ratio), 3)
-        scaled_height = max(word.height, 3)
+        scaled_height = max(target_h, 3)
         scaled_img = fake.resize((scaled_width, scaled_height), Image.LANCZOS)
-        dupe.paste(scaled_img, (word.x_start, word.y_start))
+        dupe.paste(scaled_img, (tx, ty))
     return xpr.get_cropped(dupe.convert("L"))
 
 
