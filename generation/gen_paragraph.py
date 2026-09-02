@@ -8,18 +8,23 @@ from utils.generation import (
     place_words_learned,
     upsample_words,
 )
-from utils.arghandle import add_common_args, file_check
-from utils.gen_cli import init_generation, read_words
+from utils.arghandle import add_common_args
+from utils.gen_cli import (
+    init_generation,
+    read_words,
+    add_writer_id_arg,
+    add_text_file_arg,
+    add_output_arg,
+    add_max_line_width_arg,
+)
 
 
 def main():
     parser = argparse.ArgumentParser("gen-paragraph")
-    parser.add_argument("-w", "--writer-id", type=int, default=12)
-    parser.add_argument("-i", "--text-file", type=file_check, default="./sample.txt")
-    parser.add_argument("-o", "--output", type=str, default="./output.png")
-    parser.add_argument(
-        "--max-line-width", default=900, type=int, help="max line width"
-    )
+    add_writer_id_arg(parser)
+    add_text_file_arg(parser)
+    add_output_arg(parser)
+    add_max_line_width_arg(parser)
     parser.add_argument(
         "--placement",
         choices=["heuristic", "learned"],

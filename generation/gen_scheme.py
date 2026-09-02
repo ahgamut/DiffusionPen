@@ -24,6 +24,7 @@ from utils.relcharsize import build_bbox_place_paragraph
 from utils.relcharsize import get_possible_font_sizes
 from utils.subprompt import Word, Prompt
 from utils.arghandle import add_common_args
+from utils.gen_cli import add_max_line_width_arg
 from utils.model_setup import load_models
 
 
@@ -311,9 +312,7 @@ def main():
         help="file containing config CSVs",
     )
     parser.add_argument("--output-dir", default="./saved_iam_data", help="output dir")
-    parser.add_argument(
-        "--max-line-width", default=900, type=int, help="max line width"
-    )
+    add_max_line_width_arg(parser)
     add_common_args(parser)
     args = parser.parse_args()
     ####

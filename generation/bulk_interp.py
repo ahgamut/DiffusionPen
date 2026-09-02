@@ -8,7 +8,7 @@ from utils.generation import (
     stack_images,
 )
 from utils.arghandle import add_common_args
-from utils.gen_cli import init_generation
+from utils.gen_cli import init_generation, add_output_arg
 
 
 def main():
@@ -18,7 +18,7 @@ def main():
     parser.add_argument("--writer-1", type=int, default=1)
     parser.add_argument("--writer-2", type=int, default=3)
     parser.add_argument("--sampling-word", type=str, default="hello")
-    parser.add_argument("-o", "--output", type=str, default="./outputs/")
+    add_output_arg(parser, default="./outputs/")
     add_common_args(parser)
     parser.set_defaults(interpolation=False)
 

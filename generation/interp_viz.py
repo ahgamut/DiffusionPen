@@ -7,18 +7,22 @@ from utils.generation import (
     render_paragraph,
     stack_images,
 )
-from utils.arghandle import add_common_args, file_check
-from utils.gen_cli import init_generation, read_words
+from utils.arghandle import add_common_args
+from utils.gen_cli import (
+    init_generation,
+    read_words,
+    add_text_file_arg,
+    add_output_arg,
+    add_max_line_width_arg,
+)
 
 
 def main():
     """Main function"""
     parser = argparse.ArgumentParser("interp-viz")
-    parser.add_argument("-i", "--text-file", type=file_check, default="./sample.txt")
-    parser.add_argument("-o", "--output", type=str, default="./output.png")
-    parser.add_argument(
-        "--max-line-width", default=900, type=int, help="max line width"
-    )
+    add_text_file_arg(parser)
+    add_output_arg(parser)
+    add_max_line_width_arg(parser)
     add_common_args(parser)
     parser.set_defaults(interpolation=True)
 

@@ -7,18 +7,22 @@ import argparse
 
 #
 from utils.generation import render_paragraph
-from utils.arghandle import add_common_args, file_check
-from utils.gen_cli import init_generation, read_words
+from utils.arghandle import add_common_args
+from utils.gen_cli import (
+    init_generation,
+    read_words,
+    add_text_file_arg,
+    add_output_arg,
+    add_max_line_width_arg,
+)
 
 
 def main():
     parser = argparse.ArgumentParser("regen-interp")
     parser.add_argument("-n", "--num-samples", type=int, default=5)
-    parser.add_argument("-i", "--text-file", type=file_check, default="./sample.txt")
-    parser.add_argument("-o", "--output", type=str, default="./outputs")
-    parser.add_argument(
-        "--max-line-width", default=900, type=int, help="max line width"
-    )
+    add_text_file_arg(parser)
+    add_output_arg(parser, default="./outputs")
+    add_max_line_width_arg(parser)
     add_common_args(parser)
 
     args, m = init_generation(parser, __file__)

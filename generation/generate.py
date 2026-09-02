@@ -3,15 +3,15 @@ import argparse
 #
 from utils.generation import build_fake_image_1
 from utils.arghandle import add_common_args
-from utils.gen_cli import init_generation
+from utils.gen_cli import init_generation, add_writer_id_arg, add_output_arg
 
 
 def main():
     parser = argparse.ArgumentParser("diffusionpen-singleword")
     add_common_args(parser)
-    parser.add_argument("-w", "--writer-id", type=int, default=12)
+    add_writer_id_arg(parser)
     parser.add_argument("--sampling-word", type=str, default="hello")
-    parser.add_argument("-o", "--output", default="./output.png", help="output")
+    add_output_arg(parser)
 
     args, m = init_generation(parser, __file__)
 

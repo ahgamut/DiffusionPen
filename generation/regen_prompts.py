@@ -21,7 +21,7 @@ from utils.page_prompt import (
     WriterIndex,
     DEFAULT_ROOT,
 )
-from utils.gen_cli import init_generation, read_words
+from utils.gen_cli import init_generation, read_words, add_output_arg
 
 
 def build_ref_paragraph(fakes, xpr, max_line_width, longest_word_length):
@@ -165,7 +165,7 @@ def main():
     parser.add_argument(
         "-n", "--num-prompts", default=1, type=int, help="number of prompts"
     )
-    parser.add_argument("-o", "--output", type=str, default="./outputs/")
+    add_output_arg(parser, default="./outputs/")
     parser.add_argument("--alt-text", default="./prompts/sample.txt", help="alt text")
     parser.add_argument(
         "--data-root", default=None,
