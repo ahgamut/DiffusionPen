@@ -660,6 +660,16 @@ def main():
             print("saved style bank ->", bank_path,
                   tuple(diffusion.style_bank.shape))
 
+    # Compile the UNet forward for kernel fusion. Compiling the bound method
+    # (not the module) leaves state_dict keys as `module.*`, so checkpoints,
+    # EMA, and inference loading are unchanged. Skip it while profiling (compile
+    # warmup + fusion distort the per-region --profile-steps timings), and let
+    # dynamo fall back to eager on GPUs/toolchains where inductor can't build.
+    if not args.profile_steps:
+        import torch._dynamo
+        torch._dynamo.config.suppress_errors = True
+        unet.module.forward = torch.compile(unet.module.forward)
+
     train(
         diffusion,
         unet,
