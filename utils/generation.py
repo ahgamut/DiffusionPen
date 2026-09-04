@@ -10,6 +10,7 @@ OUTPUT_MAX_LEN = 95  # + 2  # <GO>+groundtruth+<END>
 IMG_WIDTH = 256
 IMG_HEIGHT = 64
 PUNCTUATION = "_!\"#&'()*+,-./:;?"
+INK_WIDTH_TOL = 1.15  # exact-placement crop may exceed real ink width by this factor
 
 
 def setup_logging(args):
@@ -533,12 +534,19 @@ def _paste_ink_matched(dst, fake, word, ref_gray, ref_ink=None):
     ink = _ink_bbox(ref_gray.crop(box))
     if ink is None:
         tx, ty, target_h = word.x_start, word.y_start, word.height
+        target_w = word.x_end - word.x_start
     else:
         ix, iy, iw, ih = ink
-        tx, ty, target_h = word.x_start + ix, word.y_start + iy, ih
+        tx, ty, target_h, target_w = word.x_start + ix, word.y_start + iy, ih, iw
     ratio = target_h / max(fake.height, 1)
     scaled_width = max(int(fake.width * ratio), 3)
     scaled_height = max(target_h, 3)
+    # clamp a crop wider than the real ink (+tol) so it can't sprawl over
+    # neighbours; shrink height with it to keep the glyph's aspect ratio
+    max_width = max(int(target_w * INK_WIDTH_TOL), 3)
+    if scaled_width > max_width:
+        scaled_height = max(int(scaled_height * max_width / scaled_width), 3)
+        scaled_width = max_width
     scaled_img = fake.resize((scaled_width, scaled_height), Image.LANCZOS)
     if ref_ink is not None:
         scaled_img = match_ink(scaled_img, ref_ink)
