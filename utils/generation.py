@@ -518,7 +518,8 @@ def match_ink(crop, ref_ink, blur_sigma=0.6):
     return Image.fromarray(arr, "L")
 
 
-def _paste_ink_matched(dst, fake, word, ref_gray, ref_ink=None):
+def _paste_ink_matched(dst, fake, word, ref_gray, ref_ink=None, blur_sigma=0.6,
+                       ink_jitter=0.0):
     """Composite a generated word crop onto ``dst`` ('L') at ``word``'s real page
     position, darkening so the background shows between strokes.
 
@@ -549,11 +550,15 @@ def _paste_ink_matched(dst, fake, word, ref_gray, ref_ink=None):
         scaled_width = max_width
     scaled_img = fake.resize((scaled_width, scaled_height), Image.LANCZOS)
     if ref_ink is not None:
-        scaled_img = match_ink(scaled_img, ref_ink)
+        # per-word darkness jitter so words don't all land on one flat gray
+        ink = ref_ink
+        if ink_jitter:
+            ink = float(np.clip(ref_ink + np.random.normal(0.0, ink_jitter), 0.0, 255.0))
+        scaled_img = match_ink(scaled_img, ink, blur_sigma)
     _darken_paste(dst, scaled_img, (tx, ty))
 
 
-def build_ref_paragraph(fakes, xpr, raw_orig):
+def build_ref_paragraph(fakes, xpr, raw_orig, blur_sigma=0.6, ink_jitter=0.0):
     """Regenerate a whole paragraph in place: every word replaced by its
     generated crop at the word's real page position, on a blank canvas.
 
@@ -567,11 +572,12 @@ def build_ref_paragraph(fakes, xpr, raw_orig):
     ref_ink = page_ink_level(ref_gray)
     dupe = paper_background((xpr.img_width, xpr.img_height), ref_gray)
     for fake, word in zip(fakes, xpr.words):
-        _paste_ink_matched(dupe, fake, word, ref_gray, ref_ink)
+        _paste_ink_matched(dupe, fake, word, ref_gray, ref_ink, blur_sigma, ink_jitter)
     return xpr.get_cropped(dupe)
 
 
-def build_replaced_paragraph(raw_orig, xpr, gen_crops, replace_indices):
+def build_replaced_paragraph(raw_orig, xpr, gen_crops, replace_indices,
+                             blur_sigma=0.6, ink_jitter=0.0):
     """Composite generated word crops over selected bboxes of a real IAM form.
 
     Starts from the real form image (real ink everywhere) and, for each index in
@@ -595,7 +601,7 @@ def build_replaced_paragraph(raw_orig, xpr, gen_crops, replace_indices):
         # generated crop over it so the cleared region carries the page's grain
         patch = paper_background((word.x_end - word.x_start, word.y_end - word.y_start), ref_gray)
         dupe.paste(patch, box)
-        _paste_ink_matched(dupe, fake, word, ref_gray, ref_ink)
+        _paste_ink_matched(dupe, fake, word, ref_gray, ref_ink, blur_sigma, ink_jitter)
     return xpr.get_cropped(dupe)
 
 
@@ -617,12 +623,14 @@ def capture_png(img, out_path, noise_sigma=3.0):
     Image.fromarray(arr, "L").save(out_path, format="PNG")
 
 
-def compose_on_paper(ink_img, ref_gray):
+def compose_on_paper(ink_img, ref_gray, blur_sigma=0.6):
     """Drop an ink-on-white grayscale paragraph (the heuristic-reflow builders'
     output) onto paper matched to ``ref_gray``, darkening so only the ink prints.
     Removes the flat-white background that makes those variants trivial to spot,
-    and matches the ink to the page's ink level (see ``match_ink``)."""
-    ink = match_ink(ink_img, page_ink_level(ref_gray))
+    and matches the ink to the page's ink level (see ``match_ink``). The reflow is
+    one composited image, so ink jitter (per-word) does not apply here -- only the
+    shared blur."""
+    ink = match_ink(ink_img, page_ink_level(ref_gray), blur_sigma)
     bg = paper_background(ink.size, ref_gray)
     _darken_paste(bg, ink, (0, 0))
     return bg

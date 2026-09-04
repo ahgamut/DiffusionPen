@@ -103,7 +103,10 @@ def do_replacement(xpr, raw_orig, s, args, m, mapping):
         longest_word_length=longest_word_length,
         max_word_length_width=0,
     )
-    return build_replaced_paragraph(raw_orig, xpr, gen_crops, idxs)
+    return build_replaced_paragraph(
+        raw_orig, xpr, gen_crops, idxs,
+        blur_sigma=args.ink_blur, ink_jitter=args.ink_jitter,
+    )
 
 
 def regen_variants(xpr, raw_orig, raw_crop, s, args, m, alt_words):
@@ -126,8 +129,11 @@ def regen_variants(xpr, raw_orig, raw_crop, s, args, m, alt_words):
     regen_img = compose_on_paper(
         build_paragraph_image(scaled_padded_words, max_line_width=max_line_width),
         raw_orig,
+        blur_sigma=args.ink_blur,
     )
-    regen_img2 = build_ref_paragraph(fakes, xpr, raw_orig)
+    regen_img2 = build_ref_paragraph(
+        fakes, xpr, raw_orig, blur_sigma=args.ink_blur, ink_jitter=args.ink_jitter
+    )
 
     # alt text, reflowed
     words = alt_words
@@ -144,6 +150,7 @@ def regen_variants(xpr, raw_orig, raw_crop, s, args, m, alt_words):
     regen_alt = compose_on_paper(
         build_paragraph_image(scaled_padded_words, max_line_width=max_line_width),
         raw_orig,
+        blur_sigma=args.ink_blur,
     )
     return regen_img, regen_img2, regen_alt
 
@@ -187,6 +194,16 @@ def main():
         help="sensor-noise sigma for the shared capture pass applied to every "
         "saved image (real crop AND dupes) so their file sizes/stats match; "
         "0 = re-encode only",
+    )
+    parser.add_argument(
+        "--ink-blur", type=float, default=0.6,
+        help="Gaussian sigma softening each generated crop's ink to scanner "
+        "sharpness (match_ink); lower = crisper strokes, 0 = off",
+    )
+    parser.add_argument(
+        "--ink-jitter", type=float, default=0.0,
+        help="per-word ink-darkness jitter sigma (exact-placement dupes only) so "
+        "words vary in gray instead of one flat level; 0 = off",
     )
     add_common_args(parser)
 
