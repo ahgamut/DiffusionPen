@@ -190,22 +190,26 @@ def main():
         "--replace-mode json",
     )
     parser.add_argument(
-        "--capture-noise", type=float, default=3.0,
+        "--capture-noise", type=float, default=5.0,
         help="sensor-noise sigma for the shared capture pass applied to every "
         "saved image (real crop AND dupes) so their file sizes/stats match; "
         "0 = re-encode only",
     )
     parser.add_argument(
-        "--ink-blur", type=float, default=0.6,
+        "--ink-blur", type=float, default=0.15,
         help="Gaussian sigma softening each generated crop's ink to scanner "
-        "sharpness (match_ink); lower = crisper strokes, 0 = off",
+        "sharpness (match_ink); lower = crisper strokes, 0 = off. Saturates "
+        "around 0.15 (the OpenCV kernel is ~identity below that)",
     )
     parser.add_argument(
-        "--ink-jitter", type=float, default=0.0,
+        "--ink-jitter", type=float, default=8.0,
         help="per-word ink-darkness jitter sigma (exact-placement dupes only) so "
         "words vary in gray instead of one flat level; 0 = off",
     )
     add_common_args(parser)
+    # Default dupe-realism profile (converged 2026-09-04). DOG lives in
+    # add_common_args (off by default globally); the dupe pipeline turns it on.
+    parser.set_defaults(dog_gs=4.0, dog_tau=25.0, dog_neg="style")
 
     args, m = init_generation(parser, __file__)
 
