@@ -511,7 +511,16 @@ def match_ink(crop, ref_ink, blur_sigma=0.6):
     c_paper = float(np.percentile(arr, 95))
     if c_paper - c_ink >= 1.0:
         scaled = np.clip((arr - c_ink) / (c_paper - c_ink), 0.0, 1.0)
-        arr = ref_ink + scaled * (255.0 - ref_ink)
+        out = ref_ink + scaled * (255.0 - ref_ink)
+        # The ramp only forces the top 5% of pixels to pure white, so the rest of
+        # the paper lands a shade below 255 and the darken-composite tints each
+        # word's bbox a faint rectangle. Snap true paper (Otsu-bright) to 255 so
+        # the page paper shows through untouched between strokes.
+        thr, _ = cv2.threshold(
+            arr.astype(np.uint8), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        )
+        out[arr >= thr] = 255.0
+        arr = out
     arr = np.clip(arr, 0, 255).astype(np.uint8)
     if blur_sigma and blur_sigma > 0:
         arr = cv2.GaussianBlur(arr, (0, 0), blur_sigma)
