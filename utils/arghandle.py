@@ -102,6 +102,9 @@ def add_common_args(parser):
     parser.add_argument("--dog-neg", type=str, default="both",
                         choices=["both", "style", "text"],
                         help="which condition(s) DOG corrupts for the negative pass")
+    parser.add_argument("--dog-min-chars", type=int, default=3,
+                        help="skip DOG for words shorter than this (short words "
+                             "have a weak positive prediction and blow up); 1 = off")
 
     parser.set_defaults(
         allow_bank_mismatch=False,

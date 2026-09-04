@@ -91,10 +91,12 @@ class Diffusion:
             x = torch.randn((n, 3, self.img_size[0], self.img_size[1])).to(args.device)
         return x
 
-    def _dog_guidance(self, eps_p, eps_n, t, g_s=0.0, u_T=700, tau=0.0, total_T=None):
+    def _dog_guidance(self, eps_p, eps_n, t, g_s=0.0, u_T=700, tau=0.0, total_T=None,
+                      skip=None):
         """DOG guidance (arXiv:2508.17017): eps^ = eps_p + g(t)*(eps_p - eps*),
         eps* = eps_n - proj_{eps_p}(eps_n), g(t) triangular in t (peak u_T).
-        Per-sample; g_s=0 is a no-op; tau<=0 skips the negative norm-clip."""
+        Per-sample; g_s=0 is a no-op; tau<=0 skips the negative norm-clip. ``skip``
+        is an optional per-sample bool mask; masked samples pass eps_p through."""
         if g_s == 0:
             return eps_p
         if total_T is None:
@@ -110,7 +112,12 @@ class Diffusion:
         eps_star = (flat_n - coef * flat_p).reshape_as(eps_p)
         gamma = (t / u_T) if t <= u_T else (1.0 - (t - u_T) / (total_T - u_T))
         g = g_s * float(gamma)
-        return eps_p + g * (eps_p - eps_star)
+        guided = eps_p + g * (eps_p - eps_star)
+        if skip is not None:
+            m = torch.as_tensor(skip, device=eps_p.device, dtype=torch.bool)
+            m = m.view(-1, *([1] * (eps_p.dim() - 1)))
+            guided = torch.where(m, eps_p, guided)
+        return guided
 
     @staticmethod
     def _masked_noise(shape, lam, p, device):
@@ -152,10 +159,13 @@ class Diffusion:
         noise_scheduler,
         model,
         model_params,
+        dog_skip=None,
     ):
         g_s = getattr(args, "dog_gs", 0.0)
         u_T = getattr(args, "dog_ut", 700)
         tau = getattr(args, "dog_tau", 0.0)
+        # skip the negative pass entirely when every sample opts out (all short)
+        dog_on = g_s > 0 and (dog_skip is None or not all(dog_skip))
         noise_scheduler.set_timesteps(50)
         for time in noise_scheduler.timesteps:
             t_item = time.item()
@@ -165,11 +175,11 @@ class Diffusion:
                 timesteps=t,
                 **model_params,
             )
-            if g_s > 0:  # DOG: negative pass + orthogonal guidance
+            if dog_on:  # DOG: negative pass + orthogonal guidance
                 neg_params = self._dog_negative_params(args, n, model, model_params)
                 eps_n = model(x, timesteps=t, **neg_params)
                 noisy_residual = self._dog_guidance(
-                    eps_p, eps_n, t_item, g_s=g_s, u_T=u_T, tau=tau
+                    eps_p, eps_n, t_item, g_s=g_s, u_T=u_T, tau=tau, skip=dog_skip
                 )
             else:
                 noisy_residual = eps_p
@@ -358,7 +368,16 @@ class Diffusion:
                 mix_rate=mix_rate,
                 style_extractor=style_features,
             )
-            x = self.update_schedule_x(args, n, x, noise_scheduler, model, model_params)
+            # skip DOG on short words (weak positive prediction -> blow-up)
+            min_chars = getattr(args, "dog_min_chars", 1)
+            dog_skip = (
+                [len(str(w)) < min_chars for w in x_text]
+                if isinstance(x_text, (list, tuple)) and min_chars > 1
+                else None
+            )
+            x = self.update_schedule_x(
+                args, n, x, noise_scheduler, model, model_params, dog_skip=dog_skip
+            )
 
         model.train()
         return self.post_process_x(args, x, vae)
