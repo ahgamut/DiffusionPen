@@ -12,6 +12,10 @@ import os
 from models import UNetModel, ImageEncoder, Diffusion, WordPlacer, WordUpsampler
 from utils.auxiliary_functions import get_default_character_classes
 
+# CANINE is cached after the first run; skip the per-run hub staleness check.
+# Set DIFFPEN_HF_ONLINE=1 for the one-time fetch on a cold cache.
+_CANINE_LOCAL_ONLY = os.environ.get("DIFFPEN_HF_ONLINE", "0") != "1"
+
 
 def _embedding_rows(state_dict, suffix):
     """Row count of the first param whose key ends with ``suffix`` (an
@@ -45,8 +49,12 @@ def load_models(args):
         torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
 
-    tokenizer = CanineTokenizer.from_pretrained("google/canine-c")
-    text_encoder = CanineModel.from_pretrained("google/canine-c")
+    tokenizer = CanineTokenizer.from_pretrained(
+        "google/canine-c", local_files_only=_CANINE_LOCAL_ONLY
+    )
+    text_encoder = CanineModel.from_pretrained(
+        "google/canine-c", local_files_only=_CANINE_LOCAL_ONLY
+    )
     text_encoder = nn.DataParallel(text_encoder, device_ids=device_ids)
     text_encoder = text_encoder.to(args.device)
 
